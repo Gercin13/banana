@@ -36,6 +36,16 @@
         <span class="enhance-hint">расширит ваш текст в детальный промпт (работает, когда поле не пустое)</span>
       </div>
 
+      <div class="characters">
+        <label>Персонаж <span class="hint">сохранённое лицо — подставится автоматически</span></label>
+        <div class="char-row">
+          <select id="character" class="char-select"><option value="">— не выбран —</option></select>
+          <button id="save-char" class="linkbtn" type="button">💾 Сохранить лицо как персонажа</button>
+          <button id="del-char" class="linkbtn danger" type="button" hidden>✕ удалить</button>
+        </div>
+        <div class="char-preview thumbs" id="char-preview"></div>
+      </div>
+
       <div class="refs">
         <div class="refzone">
           <label>Лицо / личность <span class="hint">кто это</span></label>

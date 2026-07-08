@@ -14,6 +14,8 @@ const state = {
   faceRefs: [],
   poseRefs: [],
   garmentRefs: [],
+  characterId: "",
+  characters: [],
   busy: false,
 };
 
@@ -23,6 +25,7 @@ const els = {
   generate: $("#generate"), status: $("#status"),
   gallery: $("#gallery"), history: $("#history"), refreshHistory: $("#refresh-history"),
   refsNote: $("#refs-note"), enhanceRow: $("#enhance-row"), enhance: $("#enhance"),
+  character: $("#character"), saveChar: $("#save-char"), delChar: $("#del-char"), charPreview: $("#char-preview"),
 };
 
 // ---- Controls -------------------------------------------------------------
@@ -175,6 +178,82 @@ function setupRefs() {
   }
 }
 
+// ---- Saved characters (a named set of face references) --------------------
+async function loadCharacters() {
+  try {
+    const d = await (await fetch("/api/characters")).json();
+    state.characters = d.items || [];
+  } catch { state.characters = []; }
+  renderCharacterOptions();
+  renderCharPreview();
+}
+function renderCharacterOptions() {
+  if (!els.character) return;
+  els.character.innerHTML = '<option value="">— не выбран —</option>';
+  for (const c of state.characters) {
+    const o = document.createElement("option");
+    o.value = c.id; o.textContent = c.name || "(без имени)";
+    els.character.appendChild(o);
+  }
+  els.character.value = state.characterId || "";
+}
+function renderCharPreview() {
+  if (!els.charPreview) return;
+  const c = state.characters.find((x) => x.id === state.characterId);
+  els.charPreview.innerHTML = "";
+  if (els.delChar) els.delChar.hidden = !c;
+  if (!c) return;
+  for (const im of (c.images || []).slice(0, 8)) {
+    const t = document.createElement("div");
+    t.className = "thumb static";
+    const img = document.createElement("img"); img.src = im.url; img.alt = "";
+    t.appendChild(img);
+    els.charPreview.appendChild(t);
+  }
+}
+async function saveCharacterAction() {
+  if (!state.faceRefs.length) {
+    els.status.textContent = "Сначала добавьте фото в зону «Лицо / личность».";
+    return;
+  }
+  const name = (window.prompt("Название персонажа:") || "").trim();
+  if (!name) return;
+  els.status.textContent = "Сохраняю персонажа…";
+  try {
+    const r = await fetch("/api/characters", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, faceRefs: refsPayload("faceRefs") }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Не удалось сохранить");
+    await loadCharacters();
+    state.characterId = d.id;
+    renderCharacterOptions();
+    renderCharPreview();
+    // Face now comes from the saved character — clear the upload zone.
+    state.faceRefs = [];
+    renderThumbs("faceRefs", $("#face-thumbs"));
+    updateRefsNote();
+    els.status.textContent = `Персонаж «${name}» сохранён и выбран.`;
+  } catch (e) {
+    els.status.textContent = "⚠ " + (e.message || e);
+  }
+}
+async function deleteCharacterAction() {
+  if (!state.characterId) return;
+  const c = state.characters.find((x) => x.id === state.characterId);
+  if (!window.confirm(`Удалить персонажа «${c ? c.name : ""}»?`)) return;
+  try { await fetch(`/api/characters/${state.characterId}`, { method: "DELETE" }); } catch {}
+  state.characterId = "";
+  await loadCharacters();
+}
+function setupCharacters() {
+  if (els.character) els.character.onchange = () => { state.characterId = els.character.value; renderCharPreview(); };
+  if (els.saveChar) els.saveChar.onclick = saveCharacterAction;
+  if (els.delChar) els.delChar.onclick = deleteCharacterAction;
+}
+
 // ---- Image cards + rendering ----------------------------------------------
 function imageCard(url, { downloadName, onDelete } = {}) {
   const card = document.createElement("div");
@@ -241,8 +320,8 @@ function refsPayload(zoneKey) {
 async function generate() {
   if (state.busy) return;
   const prompt = els.prompt.value.trim();
-  if (!prompt && totalRefs() === 0) {
-    els.status.textContent = "Введите промпт или добавьте хотя бы один референс.";
+  if (!prompt && totalRefs() === 0 && !state.characterId) {
+    els.status.textContent = "Введите промпт, добавьте референс или выберите персонажа.";
     els.prompt.focus();
     return;
   }
@@ -257,6 +336,7 @@ async function generate() {
         prompt,
         aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
         enhance: !!(els.enhance && els.enhance.checked),
+        characterId: state.characterId || "",
         faceRefs: refsPayload("faceRefs"),
         poseRefs: refsPayload("poseRefs"),
         garmentRefs: refsPayload("garmentRefs"),
@@ -286,6 +366,8 @@ if (els.refreshHistory) els.refreshHistory.onclick = loadHistory;
 loadCapabilities();
 setupVoice();
 setupRefs();
+setupCharacters();
 updateRefsNote();
 showEmpty();
 loadHistory();
+loadCharacters();

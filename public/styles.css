@@ -93,6 +93,15 @@ body {
 .switch input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 .enhance-hint { font-size: 12px; color: var(--muted); }
 
+/* Saved characters */
+.characters label { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
+.characters label .hint { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .8; }
+.char-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.char-select { font: inherit; font-size: 14px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); min-width: 200px; cursor: pointer; }
+.char-preview { margin-top: 10px; }
+.thumb.static { width: 52px; height: 52px; }
+.linkbtn.danger { color: #ef4444; }
+
 .controls { display: flex; flex-direction: column; gap: 18px; }
 .control-row { display: flex; gap: 28px; flex-wrap: wrap; }
 .control label {

@@ -13,7 +13,10 @@ import "dotenv/config";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { handleGenerate, handleHistory, handleDelete, healthPayload } from "./lib/handler.js";
+import {
+  handleGenerate, handleHistory, handleDelete, healthPayload,
+  handleListCharacters, handleSaveCharacter, handleDeleteCharacter,
+} from "./lib/handler.js";
 import { IMAGES_DIR } from "./lib/store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,6 +49,22 @@ app.get("/api/history", (req, res) => {
 
 app.delete("/api/history/:id", (req, res) => {
   const { status, body } = handleDelete(req.params.id);
+  res.status(status).json(body);
+});
+
+// --- Saved characters ---
+app.get("/api/characters", (req, res) => {
+  const { status, body } = handleListCharacters();
+  res.status(status).json(body);
+});
+
+app.post("/api/characters", (req, res) => {
+  const { status, body } = handleSaveCharacter(req.body);
+  res.status(status).json(body);
+});
+
+app.delete("/api/characters/:id", (req, res) => {
+  const { status, body } = handleDeleteCharacter(req.params.id);
   res.status(status).json(body);
 });
 
