@@ -62,7 +62,7 @@ body {
 @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 
 /* Reference upload zones */
-.refs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.refs { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 .refzone label {
   display: block; font-size: 12px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .04em; color: var(--muted); margin-bottom: 8px;
