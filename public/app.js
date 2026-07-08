@@ -7,6 +7,8 @@ const state = {
   tier: "draft",
   aspects: ["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"],
   tiers: [{ id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
+  size: "1K",
+  sizes: ["1K", "2K", "4K"],
   maxImages: 4,
   maxRefs: 14,
   faceRefs: [],   // [{ mimeType, dataBase64, thumbUrl }]
@@ -16,7 +18,7 @@ const state = {
 
 const els = {
   prompt: $("#prompt"), mic: $("#mic"), aspects: $("#aspects"),
-  counts: $("#counts"), tiers: $("#tiers"), generate: $("#generate"),
+  counts: $("#counts"), tiers: $("#tiers"), sizes: $("#sizes"), generate: $("#generate"),
   status: $("#status"), gallery: $("#gallery"), refsNote: $("#refs-note"),
 };
 
@@ -54,15 +56,27 @@ function renderTiers() {
     els.tiers.appendChild(b);
   }
 }
+function renderSizes() {
+  els.sizes.innerHTML = "";
+  for (const s of state.sizes) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "seg" + (s === state.size ? " active" : "");
+    b.textContent = s;
+    b.onclick = () => { state.size = s; renderSizes(); };
+    els.sizes.appendChild(b);
+  }
+}
 
 // ---- Capabilities (from backend, with fallback) ---------------------------
 async function loadCapabilities() {
   try {
     const d = await (await fetch("/api/health")).json();
     if (Array.isArray(d.aspectRatios) && d.aspectRatios.length) state.aspects = d.aspectRatios;
+    if (Array.isArray(d.imageSizes) && d.imageSizes.length) state.sizes = d.imageSizes;
     if (Number.isInteger(d.maxImages)) state.maxImages = d.maxImages;
   } catch { /* keep defaults */ }
-  renderAspects(); renderCounts(); renderTiers();
+  renderAspects(); renderCounts(); renderTiers(); renderSizes();
 }
 
 // ---- Voice input (optional; hidden if unsupported) ------------------------
@@ -190,6 +204,10 @@ function renderImages(images) {
   });
 }
 
+function showEmpty() {
+  els.gallery.innerHTML = '<div class="empty">Здесь появятся сгенерированные изображения</div>';
+}
+
 async function generate() {
   if (state.busy) return;
   const prompt = els.prompt.value.trim();
@@ -202,7 +220,7 @@ async function generate() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt, aspectRatio: state.aspect, count: state.count, tier: state.tier,
+        prompt, aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
         faceRefs: state.faceRefs.map((r) => ({ mimeType: r.mimeType, dataBase64: r.dataBase64 })),
         otherRefs: state.otherRefs.map((r) => ({ mimeType: r.mimeType, dataBase64: r.dataBase64 })),
       }),
@@ -213,7 +231,7 @@ async function generate() {
     const extra = d.errors?.length ? ` · ${d.errors.length} из ${state.count} не удалось` : "";
     els.status.textContent = `Готово: ${d.images.length} изобр.${extra}`;
   } catch (e) {
-    els.gallery.innerHTML = "";
+    showEmpty();
     els.status.textContent = "⚠ " + (e.message || e);
   } finally {
     setBusy(false);
@@ -229,3 +247,4 @@ loadCapabilities();
 setupVoice();
 setupRefs();
 updateRefsNote();
+showEmpty();

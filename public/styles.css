@@ -124,9 +124,18 @@ body {
 
 .status { margin: 0; min-height: 20px; font-size: 14px; color: var(--muted); }
 
+.results { margin-top: 26px; }
+.results-title { margin: 0 0 12px; font-size: 15px; font-weight: 600; color: var(--text); }
+.hint-note { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); }
+
 .gallery {
-  margin-top: 26px; display: grid; gap: 16px;
+  display: grid; gap: 16px;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.empty {
+  grid-column: 1 / -1;
+  border: 1.5px dashed var(--border); border-radius: 12px;
+  padding: 44px 20px; text-align: center; color: var(--muted); font-size: 14px;
 }
 .card {
   position: relative; background: var(--surface); border: 1px solid var(--border);

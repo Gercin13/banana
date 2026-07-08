@@ -63,6 +63,11 @@
             <label>Качество</label>
             <div id="tiers" class="segmented"></div>
           </div>
+          <div class="control">
+            <label>Разрешение</label>
+            <div id="sizes" class="segmented"></div>
+            <span class="hint-note">2K/4K тяжелее — на Netlify возможны лимиты</span>
+          </div>
         </div>
       </div>
 
@@ -70,7 +75,10 @@
       <p id="status" class="status" role="status"></p>
     </section>
 
-    <section id="gallery" class="gallery" aria-live="polite"></section>
+    <section class="results">
+      <h2 class="results-title">Результат</h2>
+      <div id="gallery" class="gallery" aria-live="polite"></div>
+    </section>
   </main>
 
   <script src="/app.js"></script>
