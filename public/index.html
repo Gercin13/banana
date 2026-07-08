@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nano Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◗</span>
+      <div>
+        <h1>Nano Studio</h1>
+        <p class="tagline">Генерация изображений · Gemini Nano Banana</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="composer">
+      <div class="prompt-wrap">
+        <textarea id="prompt" rows="4"
+          placeholder="Опишите изображение…  (Ctrl / ⌘ + Enter — сгенерировать)"></textarea>
+        <button id="mic" class="mic" type="button" title="Голосовой ввод" aria-label="Голосовой ввод">🎙️</button>
+      </div>
+
+      <div class="refs">
+        <div class="refzone">
+          <label>Лицо / личность <span class="hint">заякорит персонажа</span></label>
+          <div class="dropzone" id="face-drop" tabindex="0" role="button" aria-label="Загрузить референс лица">
+            <input type="file" id="face-input" accept="image/*" multiple hidden />
+            <span class="dz-hint">Перетащите фото лица или нажмите</span>
+            <div class="thumbs" id="face-thumbs"></div>
+          </div>
+        </div>
+        <div class="refzone">
+          <label>Остальное <span class="hint">позы, одежда, стиль</span></label>
+          <div class="dropzone" id="other-drop" tabindex="0" role="button" aria-label="Загрузить прочие референсы">
+            <input type="file" id="other-input" accept="image/*" multiple hidden />
+            <span class="dz-hint">Перетащите фото или нажмите</span>
+            <div class="thumbs" id="other-thumbs"></div>
+          </div>
+        </div>
+        <p class="refs-note" id="refs-note">Референсы опциональны · суммарно до 14</p>
+      </div>
+
+      <div class="controls">
+        <div class="control">
+          <label>Соотношение сторон</label>
+          <div id="aspects" class="pills"></div>
+        </div>
+
+        <div class="control-row">
+          <div class="control">
+            <label>Количество</label>
+            <div id="counts" class="segmented"></div>
+          </div>
+          <div class="control">
+            <label>Качество</label>
+            <div id="tiers" class="segmented"></div>
+          </div>
+        </div>
+      </div>
+
+      <button id="generate" class="generate" type="button">Сгенерировать</button>
+      <p id="status" class="status" role="status"></p>
+    </section>
+
+    <section id="gallery" class="gallery" aria-live="polite"></section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
