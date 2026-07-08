@@ -15,6 +15,7 @@ const state = {
   poseRefs: [],
   garmentRefs: [],
   productRefs: [],
+  backgroundRefs: [],
   characterId: "",
   characters: [],
   busy: false,
@@ -118,10 +119,11 @@ const ZONES = [
   { key: "poseRefs", drop: "#pose-drop", input: "#pose-input", thumbs: "#pose-thumbs" },
   { key: "garmentRefs", drop: "#garment-drop", input: "#garment-input", thumbs: "#garment-thumbs" },
   { key: "productRefs", drop: "#product-drop", input: "#product-input", thumbs: "#product-thumbs" },
+  { key: "backgroundRefs", drop: "#background-drop", input: "#background-input", thumbs: "#background-thumbs" },
 ];
 
 function totalRefs() {
-  return state.faceRefs.length + state.poseRefs.length + state.garmentRefs.length + state.productRefs.length;
+  return state.faceRefs.length + state.poseRefs.length + state.garmentRefs.length + state.productRefs.length + state.backgroundRefs.length;
 }
 function updateRefsNote() {
   els.refsNote.textContent = `Референсы опциональны · использовано ${totalRefs()} из ${state.maxRefs}`;
@@ -343,6 +345,7 @@ async function generate() {
         poseRefs: refsPayload("poseRefs"),
         garmentRefs: refsPayload("garmentRefs"),
         productRefs: refsPayload("productRefs"),
+        backgroundRefs: refsPayload("backgroundRefs"),
       }),
     });
     const d = await r.json();
