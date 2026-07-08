@@ -1,25 +1,27 @@
-// Nano Studio — frontend logic (vanilla JS, no build step).
+// Nano Studio — frontend (vanilla JS, no build step).
 const $ = (s) => document.querySelector(s);
 
 const state = {
   aspect: "1:1",
   count: 1,
   tier: "draft",
+  size: "1K",
   aspects: ["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"],
   tiers: [{ id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
-  size: "1K",
   sizes: ["1K", "2K", "4K"],
   maxImages: 4,
   maxRefs: 14,
-  faceRefs: [],   // [{ mimeType, dataBase64, thumbUrl }]
+  faceRefs: [],
   otherRefs: [],
   busy: false,
 };
 
 const els = {
-  prompt: $("#prompt"), mic: $("#mic"), aspects: $("#aspects"),
-  counts: $("#counts"), tiers: $("#tiers"), sizes: $("#sizes"), generate: $("#generate"),
-  status: $("#status"), gallery: $("#gallery"), refsNote: $("#refs-note"),
+  prompt: $("#prompt"), mic: $("#mic"),
+  aspects: $("#aspects"), counts: $("#counts"), tiers: $("#tiers"), sizes: $("#sizes"),
+  generate: $("#generate"), status: $("#status"),
+  gallery: $("#gallery"), history: $("#history"), refreshHistory: $("#refresh-history"),
+  refsNote: $("#refs-note"),
 };
 
 // ---- Controls -------------------------------------------------------------
@@ -88,33 +90,26 @@ function setupVoice() {
   rec.interimResults = true;
   rec.continuous = false;
   let base = "", listening = false;
-
   rec.onresult = (e) => {
     let txt = "";
     for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
     els.prompt.value = (base ? base + " " : "") + txt;
   };
   const stop = () => { listening = false; els.mic.classList.remove("recording"); };
-  rec.onend = stop;
-  rec.onerror = stop;
-
+  rec.onend = stop; rec.onerror = stop;
   els.mic.onclick = () => {
     if (listening) { rec.stop(); return; }
     base = els.prompt.value.trim();
-    listening = true;
-    els.mic.classList.add("recording");
+    listening = true; els.mic.classList.add("recording");
     try { rec.start(); } catch { stop(); }
   };
 }
 
-// ---- Reference images (face + other), optional -----------------------------
+// ---- Reference images (face + other), optional ----------------------------
 function totalRefs() { return state.faceRefs.length + state.otherRefs.length; }
-
 function updateRefsNote() {
   els.refsNote.textContent = `Референсы опциональны · использовано ${totalRefs()} из ${state.maxRefs}`;
 }
-
-// Downscale to max 1024px and encode as JPEG -> { mimeType, dataBase64, thumbUrl }.
 function fileToRef(file) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -134,7 +129,6 @@ function fileToRef(file) {
     img.src = url;
   });
 }
-
 function renderThumbs(zoneKey, thumbsEl) {
   const list = state[zoneKey];
   thumbsEl.innerHTML = "";
@@ -149,7 +143,6 @@ function renderThumbs(zoneKey, thumbsEl) {
     thumbsEl.appendChild(t);
   });
 }
-
 async function addFiles(zoneKey, thumbsEl, files) {
   for (const f of [...files].filter((f) => f.type.startsWith("image/"))) {
     if (totalRefs() >= state.maxRefs) { els.status.textContent = `Максимум ${state.maxRefs} референсов всего.`; break; }
@@ -158,7 +151,6 @@ async function addFiles(zoneKey, thumbsEl, files) {
   renderThumbs(zoneKey, thumbsEl);
   updateRefsNote();
 }
-
 function setupRefZone(zoneKey, drop, input, thumbs) {
   drop.addEventListener("click", (e) => { if (!e.target.closest(".rm")) input.click(); });
   drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
@@ -167,10 +159,63 @@ function setupRefZone(zoneKey, drop, input, thumbs) {
   drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
   drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("dragover"); addFiles(zoneKey, thumbs, e.dataTransfer.files); });
 }
-
 function setupRefs() {
   setupRefZone("faceRefs", $("#face-drop"), $("#face-input"), $("#face-thumbs"));
   setupRefZone("otherRefs", $("#other-drop"), $("#other-input"), $("#other-thumbs"));
+}
+
+// ---- Image cards + rendering ----------------------------------------------
+function imageCard(url, { downloadName, onDelete } = {}) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const view = document.createElement("a");
+  view.href = url; view.target = "_blank"; view.rel = "noopener noreferrer";
+  const im = document.createElement("img");
+  im.src = url; im.alt = ""; im.loading = "lazy";
+  view.appendChild(im);
+  const dl = document.createElement("a");
+  dl.className = "download"; dl.href = url; dl.download = downloadName || "";
+  dl.textContent = "Скачать";
+  card.append(view, dl);
+  if (onDelete) {
+    const del = document.createElement("button");
+    del.className = "del"; del.type = "button"; del.textContent = "×"; del.title = "Удалить";
+    del.onclick = onDelete;
+    card.appendChild(del);
+  }
+  return card;
+}
+function showEmpty() {
+  els.gallery.innerHTML = '<div class="empty">Здесь появятся сгенерированные изображения</div>';
+}
+function skeletons(n) {
+  els.gallery.innerHTML = "";
+  for (let i = 0; i < n; i++) { const d = document.createElement("div"); d.className = "card skeleton"; els.gallery.appendChild(d); }
+}
+function renderResults(images) {
+  els.gallery.innerHTML = "";
+  images.forEach((img, i) => els.gallery.appendChild(imageCard(img.url, { downloadName: `nano-${Date.now()}-${i + 1}.png` })));
+}
+
+// ---- History --------------------------------------------------------------
+async function loadHistory() {
+  try {
+    const d = await (await fetch("/api/history?limit=200")).json();
+    const items = d.items || [];
+    els.history.innerHTML = "";
+    if (!items.length) { els.history.innerHTML = '<div class="empty">История пуста</div>'; return; }
+    for (const rec of items) {
+      for (const img of rec.images || []) {
+        els.history.appendChild(imageCard(img.url, {
+          downloadName: `nano-${rec.id}.png`,
+          onDelete: async () => {
+            try { await fetch(`/api/history/${rec.id}`, { method: "DELETE" }); } catch {}
+            loadHistory();
+          },
+        }));
+      }
+    }
+  } catch { /* ignore */ }
 }
 
 // ---- Generate -------------------------------------------------------------
@@ -179,35 +224,6 @@ function setBusy(b) {
   els.generate.disabled = b;
   els.generate.textContent = b ? "Генерирую…" : "Сгенерировать";
 }
-function skeletons(n) {
-  els.gallery.innerHTML = "";
-  for (let i = 0; i < n; i++) {
-    const d = document.createElement("div");
-    d.className = "card skeleton";
-    els.gallery.appendChild(d);
-  }
-}
-function renderImages(images) {
-  els.gallery.innerHTML = "";
-  images.forEach((img, i) => {
-    const src = `data:${img.mimeType};base64,${img.dataBase64}`;
-    const card = document.createElement("div");
-    card.className = "card";
-    const im = document.createElement("img");
-    im.src = src; im.alt = `Результат ${i + 1}`; im.loading = "lazy";
-    const dl = document.createElement("a");
-    dl.className = "download"; dl.href = src;
-    dl.download = `nano-studio-${Date.now()}-${i + 1}.png`;
-    dl.textContent = "Скачать";
-    card.append(im, dl);
-    els.gallery.appendChild(card);
-  });
-}
-
-function showEmpty() {
-  els.gallery.innerHTML = '<div class="empty">Здесь появятся сгенерированные изображения</div>';
-}
-
 async function generate() {
   if (state.busy) return;
   const prompt = els.prompt.value.trim();
@@ -227,9 +243,10 @@ async function generate() {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Ошибка генерации");
-    renderImages(d.images);
+    renderResults(d.images);
     const extra = d.errors?.length ? ` · ${d.errors.length} из ${state.count} не удалось` : "";
     els.status.textContent = `Готово: ${d.images.length} изобр.${extra}`;
+    loadHistory();
   } catch (e) {
     showEmpty();
     els.status.textContent = "⚠ " + (e.message || e);
@@ -239,12 +256,12 @@ async function generate() {
 }
 
 els.generate.onclick = generate;
-els.prompt.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate();
-});
+els.prompt.addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate(); });
+if (els.refreshHistory) els.refreshHistory.onclick = loadHistory;
 
 loadCapabilities();
 setupVoice();
 setupRefs();
 updateRefsNote();
 showEmpty();
+loadHistory();

@@ -1,0 +1,13 @@
+# One command to run everything: `docker compose up --build`
+# Reads GEMINI_API_KEY from a local .env file (never baked into the image).
+services:
+  nano-studio:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DATA_DIR=/app/data
+    volumes:
+      - ./data:/app/data      # persist generated images + history on the host
+    restart: unless-stopped

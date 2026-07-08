@@ -155,6 +155,22 @@ body {
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
+/* History */
+.history { margin-top: 34px; }
+.history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.history-head h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.linkbtn { background: none; border: none; color: var(--accent); font: inherit; font-size: 13px; cursor: pointer; padding: 4px; }
+.linkbtn:hover { text-decoration: underline; }
+
+.card a { display: block; }
+.card .del {
+  position: absolute; top: 8px; right: 8px; width: 24px; height: 24px;
+  border-radius: 50%; border: none; cursor: pointer; padding: 0;
+  background: rgba(0,0,0,.55); color: #fff; font-size: 15px; line-height: 22px;
+  opacity: 0; transition: opacity .15s ease;
+}
+.card:hover .del { opacity: 1; }
+
 @media (max-width: 540px) {
   .control-row { gap: 16px; }
   .refs { grid-template-columns: 1fr; }

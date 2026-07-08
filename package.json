@@ -1,8 +1,8 @@
 {
   "name": "nano-studio",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Local-first image generation studio powered by Google Gemini (Nano Banana). Architected to grow into a secure multi-user service.",
+  "description": "Robust local-first image studio powered by Google Gemini (Nano Banana). Persistent Node server + disk storage; containerized, portable, no serverless limits.",
   "type": "module",
   "scripts": {
     "start": "node server.js",
