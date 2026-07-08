@@ -15,6 +15,9 @@ ENV NODE_ENV=production
 ENV DATA_DIR=/app/data
 
 EXPOSE 3000
-VOLUME ["/app/data"]
 
+# Persistence: mount a volume / host dir at /app/data.
+#  - Local:   docker-compose maps ./data:/app/data
+#  - Railway: add a Volume with mount path /app/data
+# (The Docker VOLUME instruction is intentionally omitted — Railway rejects it.)
 CMD ["node", "server.js"]
