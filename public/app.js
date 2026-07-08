@@ -12,7 +12,8 @@ const state = {
   maxImages: 4,
   maxRefs: 14,
   faceRefs: [],
-  otherRefs: [],
+  poseRefs: [],
+  garmentRefs: [],
   busy: false,
 };
 
@@ -21,7 +22,7 @@ const els = {
   aspects: $("#aspects"), counts: $("#counts"), tiers: $("#tiers"), sizes: $("#sizes"),
   generate: $("#generate"), status: $("#status"),
   gallery: $("#gallery"), history: $("#history"), refreshHistory: $("#refresh-history"),
-  refsNote: $("#refs-note"),
+  refsNote: $("#refs-note"), enhanceRow: $("#enhance-row"), enhance: $("#enhance"),
 };
 
 // ---- Controls -------------------------------------------------------------
@@ -77,6 +78,8 @@ async function loadCapabilities() {
     if (Array.isArray(d.aspectRatios) && d.aspectRatios.length) state.aspects = d.aspectRatios;
     if (Array.isArray(d.imageSizes) && d.imageSizes.length) state.sizes = d.imageSizes;
     if (Number.isInteger(d.maxImages)) state.maxImages = d.maxImages;
+    // Show the Atomesus toggle only when the server has the key configured.
+    if (d.atomesusEnhance && els.enhanceRow) els.enhanceRow.hidden = false;
   } catch { /* keep defaults */ }
   renderAspects(); renderCounts(); renderTiers(); renderSizes();
 }
@@ -105,8 +108,16 @@ function setupVoice() {
   };
 }
 
-// ---- Reference images (face + other), optional ----------------------------
-function totalRefs() { return state.faceRefs.length + state.otherRefs.length; }
+// ---- Reference images: three roles (face / pose / garment) ----------------
+const ZONES = [
+  { key: "faceRefs", drop: "#face-drop", input: "#face-input", thumbs: "#face-thumbs" },
+  { key: "poseRefs", drop: "#pose-drop", input: "#pose-input", thumbs: "#pose-thumbs" },
+  { key: "garmentRefs", drop: "#garment-drop", input: "#garment-input", thumbs: "#garment-thumbs" },
+];
+
+function totalRefs() {
+  return state.faceRefs.length + state.poseRefs.length + state.garmentRefs.length;
+}
 function updateRefsNote() {
   els.refsNote.textContent = `Референсы опциональны · использовано ${totalRefs()} из ${state.maxRefs}`;
 }
@@ -151,17 +162,17 @@ async function addFiles(zoneKey, thumbsEl, files) {
   renderThumbs(zoneKey, thumbsEl);
   updateRefsNote();
 }
-function setupRefZone(zoneKey, drop, input, thumbs) {
-  drop.addEventListener("click", (e) => { if (!e.target.closest(".rm")) input.click(); });
-  drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
-  input.addEventListener("change", () => { addFiles(zoneKey, thumbs, input.files); input.value = ""; });
-  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("dragover"); });
-  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
-  drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("dragover"); addFiles(zoneKey, thumbs, e.dataTransfer.files); });
-}
 function setupRefs() {
-  setupRefZone("faceRefs", $("#face-drop"), $("#face-input"), $("#face-thumbs"));
-  setupRefZone("otherRefs", $("#other-drop"), $("#other-input"), $("#other-thumbs"));
+  for (const z of ZONES) {
+    const drop = $(z.drop), input = $(z.input), thumbs = $(z.thumbs);
+    if (!drop) continue;
+    drop.addEventListener("click", (e) => { if (!e.target.closest(".rm")) input.click(); });
+    drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
+    input.addEventListener("change", () => { addFiles(z.key, thumbs, input.files); input.value = ""; });
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("dragover"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+    drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("dragover"); addFiles(z.key, thumbs, e.dataTransfer.files); });
+  }
 }
 
 // ---- Image cards + rendering ----------------------------------------------
@@ -224,10 +235,17 @@ function setBusy(b) {
   els.generate.disabled = b;
   els.generate.textContent = b ? "Генерирую…" : "Сгенерировать";
 }
+function refsPayload(zoneKey) {
+  return state[zoneKey].map((r) => ({ mimeType: r.mimeType, dataBase64: r.dataBase64 }));
+}
 async function generate() {
   if (state.busy) return;
   const prompt = els.prompt.value.trim();
-  if (!prompt) { els.status.textContent = "Введите промпт."; els.prompt.focus(); return; }
+  if (!prompt && totalRefs() === 0) {
+    els.status.textContent = "Введите промпт или добавьте хотя бы один референс.";
+    els.prompt.focus();
+    return;
+  }
   els.status.textContent = "";
   setBusy(true);
   skeletons(state.count);
@@ -236,16 +254,22 @@ async function generate() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        prompt, aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
-        faceRefs: state.faceRefs.map((r) => ({ mimeType: r.mimeType, dataBase64: r.dataBase64 })),
-        otherRefs: state.otherRefs.map((r) => ({ mimeType: r.mimeType, dataBase64: r.dataBase64 })),
+        prompt,
+        aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
+        enhance: !!(els.enhance && els.enhance.checked),
+        faceRefs: refsPayload("faceRefs"),
+        poseRefs: refsPayload("poseRefs"),
+        garmentRefs: refsPayload("garmentRefs"),
       }),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Ошибка генерации");
     renderResults(d.images);
-    const extra = d.errors?.length ? ` · ${d.errors.length} из ${state.count} не удалось` : "";
-    els.status.textContent = `Готово: ${d.images.length} изобр.${extra}`;
+    const bits = [`Готово: ${d.images.length} изобр.`];
+    if (d.mode === "auto") bits.push("режим: авто из референсов");
+    if (d.enhanced) bits.push("промпт улучшен Atomesus");
+    if (d.errors?.length) bits.push(`${d.errors.length} из ${state.count} не удалось`);
+    els.status.textContent = bits.join(" · ");
     loadHistory();
   } catch (e) {
     showEmpty();

@@ -62,7 +62,7 @@ body {
 @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 
 /* Reference upload zones */
-.refs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.refs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .refzone label {
   display: block; font-size: 12px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .04em; color: var(--muted); margin-bottom: 8px;
@@ -86,6 +86,12 @@ body {
   background: rgba(0,0,0,.62); color: #fff; font-size: 12px; padding: 0;
 }
 .refs-note { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
+
+/* Atomesus enhance toggle */
+.enhance-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; user-select: none; }
+.switch input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.enhance-hint { font-size: 12px; color: var(--muted); }
 
 .controls { display: flex; flex-direction: column; gap: 18px; }
 .control-row { display: flex; gap: 28px; flex-wrap: wrap; }
