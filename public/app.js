@@ -7,7 +7,7 @@ const state = {
   tier: "draft",
   size: "1K",
   aspects: ["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"],
-  tiers: [{ id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
+  tiers: [{ id: "lite", label: "Быстро" }, { id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
   sizes: ["1K", "2K", "4K"],
   maxImages: 4,
   maxRefs: 14,
@@ -28,7 +28,20 @@ const els = {
   gallery: $("#gallery"), history: $("#history"), refreshHistory: $("#refresh-history"),
   refsNote: $("#refs-note"), enhanceRow: $("#enhance-row"), enhance: $("#enhance"),
   character: $("#character"), saveChar: $("#save-char"), delChar: $("#del-char"), charPreview: $("#char-preview"),
+  cost: $("#cost-estimate"),
 };
+
+// Rough per-image cost estimate (USD, ~2026) — for display only.
+const PRICES = {
+  lite:    { "1K": 0.033, "2K": 0.033, "4K": 0.06 },
+  draft:   { "1K": 0.067, "2K": 0.067, "4K": 0.13 },
+  quality: { "1K": 0.134, "2K": 0.134, "4K": 0.24 },
+};
+function updateCost() {
+  if (!els.cost) return;
+  const per = (PRICES[state.tier] && PRICES[state.tier][state.size]) || 0;
+  els.cost.textContent = `≈ $${(per * state.count).toFixed(2)} за генерацию · оценка`;
+}
 
 // ---- Controls -------------------------------------------------------------
 function renderAspects() {
@@ -49,7 +62,7 @@ function renderCounts() {
     b.type = "button";
     b.className = "seg" + (i === state.count ? " active" : "");
     b.textContent = String(i);
-    b.onclick = () => { state.count = i; renderCounts(); };
+    b.onclick = () => { state.count = i; renderCounts(); updateCost(); };
     els.counts.appendChild(b);
   }
 }
@@ -60,18 +73,24 @@ function renderTiers() {
     b.type = "button";
     b.className = "seg" + (t.id === state.tier ? " active" : "");
     b.textContent = t.label;
-    b.onclick = () => { state.tier = t.id; renderTiers(); };
+    b.onclick = () => {
+      state.tier = t.id;
+      if (t.id === "lite") state.size = "1K"; // Lite supports 1K only
+      renderTiers(); renderSizes(); updateCost();
+    };
     els.tiers.appendChild(b);
   }
 }
 function renderSizes() {
   els.sizes.innerHTML = "";
+  const liteLock = state.tier === "lite"; // Lite supports 1K only
   for (const s of state.sizes) {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "seg" + (s === state.size ? " active" : "");
+    const disabled = liteLock && s !== "1K";
+    b.className = "seg" + (s === state.size ? " active" : "") + (disabled ? " disabled" : "");
     b.textContent = s;
-    b.onclick = () => { state.size = s; renderSizes(); };
+    if (!disabled) b.onclick = () => { state.size = s; renderSizes(); updateCost(); };
     els.sizes.appendChild(b);
   }
 }
@@ -86,7 +105,7 @@ async function loadCapabilities() {
     // Show the Atomesus toggle only when the server has the key configured.
     if (d.atomesusEnhance && els.enhanceRow) els.enhanceRow.hidden = false;
   } catch { /* keep defaults */ }
-  renderAspects(); renderCounts(); renderTiers(); renderSizes();
+  renderAspects(); renderCounts(); renderTiers(); renderSizes(); updateCost();
 }
 
 // ---- Voice input (optional; hidden if unsupported) ------------------------
