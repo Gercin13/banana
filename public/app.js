@@ -8,9 +8,9 @@ const state = {
   size: "1K",
   aspects: ["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"],
   tiers: [{ id: "lite", label: "Быстро" }, { id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
-  sizes: ["1K", "2K", "4K"],
+  sizes: ["1K", "2K"],
   maxImages: 4,
-  maxRefs: 14,
+  maxRefs: 10,
   faceRefs: [],
   poseRefs: [],
   garmentRefs: [],
@@ -31,11 +31,11 @@ const els = {
   cost: $("#cost-estimate"),
 };
 
-// Rough per-image cost estimate (USD, ~2026) — for display only.
+// Rough per-image cost estimate (USD, WaveSpeed ~2026) — for display only.
 const PRICES = {
-  lite:    { "1K": 0.033, "2K": 0.033, "4K": 0.06 },
-  draft:   { "1K": 0.067, "2K": 0.067, "4K": 0.13 },
-  quality: { "1K": 0.134, "2K": 0.134, "4K": 0.24 },
+  lite:    { "1K": 0.015, "2K": 0.015 },
+  draft:   { "1K": 0.045, "2K": 0.09 },
+  quality: { "1K": 0.045, "2K": 0.09 },
 };
 function updateCost() {
   if (!els.cost) return;
