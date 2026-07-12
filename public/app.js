@@ -16,6 +16,7 @@ const state = {
   garmentRefs: [],
   productRefs: [],
   backgroundRefs: [],
+  editImage: null, // { mimeType, dataBase64, thumbUrl } — for pure image editing
   characterId: "",
   characters: [],
   busy: false,
@@ -27,6 +28,8 @@ const els = {
   generate: $("#generate"), status: $("#status"),
   gallery: $("#gallery"), history: $("#history"), refreshHistory: $("#refresh-history"),
   refsNote: $("#refs-note"), enhanceRow: $("#enhance-row"), enhance: $("#enhance"),
+  attach: $("#attach"), attachInput: $("#attach-input"),
+  editPreview: $("#edit-preview"), editThumb: $("#edit-thumb"), editRemove: $("#edit-remove"),
   character: $("#character"), saveChar: $("#save-char"), delChar: $("#del-char"), charPreview: $("#char-preview"),
   cost: $("#cost-estimate"),
 };
@@ -201,6 +204,33 @@ function setupRefs() {
   }
 }
 
+// ---- Edit image (attach photo to prompt for editing) ----------------------
+function renderEditPreview() {
+  if (!els.editPreview) return;
+  if (state.editImage) {
+    els.editThumb.innerHTML = '';
+    const img = document.createElement("img"); img.src = state.editImage.thumbUrl; img.alt = "";
+    els.editThumb.appendChild(img);
+    els.editPreview.hidden = false;
+    els.prompt.placeholder = "Опишите, что изменить на фото…  (убрать фон, заменить цвет, удалить объект и т.п.)";
+  } else {
+    els.editPreview.hidden = true;
+    els.editThumb.innerHTML = '';
+    els.prompt.placeholder = "Опишите изображение — или оставьте пустым, и я соберу из референсов.  (Ctrl / ⌘ + Enter — сгенерировать)";
+  }
+}
+function setupEditAttach() {
+  if (els.attach) els.attach.onclick = () => els.attachInput && els.attachInput.click();
+  if (els.attachInput) els.attachInput.onchange = async () => {
+    const f = els.attachInput.files[0];
+    els.attachInput.value = "";
+    if (!f || !f.type.startsWith("image/")) return;
+    try { state.editImage = await fileToRef(f); } catch { return; }
+    renderEditPreview();
+  };
+  if (els.editRemove) els.editRemove.onclick = () => { state.editImage = null; renderEditPreview(); };
+}
+
 // ---- Saved characters (a named set of face references) --------------------
 async function loadCharacters() {
   try {
@@ -343,7 +373,12 @@ function refsPayload(zoneKey) {
 async function generate() {
   if (state.busy) return;
   const prompt = els.prompt.value.trim();
-  if (!prompt && totalRefs() === 0 && !state.characterId) {
+  if (state.editImage && !prompt) {
+    els.status.textContent = "Опишите, что изменить на прикреплённом фото.";
+    els.prompt.focus();
+    return;
+  }
+  if (!prompt && totalRefs() === 0 && !state.characterId && !state.editImage) {
     els.status.textContent = "Введите промпт, добавьте референс или выберите персонажа.";
     els.prompt.focus();
     return;
@@ -360,6 +395,7 @@ async function generate() {
         aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
         enhance: !!(els.enhance && els.enhance.checked),
         characterId: state.characterId || "",
+        editImage: state.editImage ? { mimeType: state.editImage.mimeType, dataBase64: state.editImage.dataBase64 } : null,
         faceRefs: refsPayload("faceRefs"),
         poseRefs: refsPayload("poseRefs"),
         garmentRefs: refsPayload("garmentRefs"),
@@ -371,7 +407,8 @@ async function generate() {
     if (!r.ok) throw new Error(d.error || "Ошибка генерации");
     renderResults(d.images);
     const bits = [`Готово: ${d.images.length} изобр.`];
-    if (d.mode === "auto") bits.push("режим: авто из референсов");
+    if (d.mode === "edit") bits.push("режим: редактирование фото");
+    else if (d.mode === "auto") bits.push("режим: авто из референсов");
     if (d.enhanced) bits.push("промпт улучшен Atomesus");
     if (d.errors?.length) bits.push(`${d.errors.length} из ${state.count} не удалось`);
     els.status.textContent = bits.join(" · ");
@@ -391,6 +428,7 @@ if (els.refreshHistory) els.refreshHistory.onclick = loadHistory;
 loadCapabilities();
 setupVoice();
 setupRefs();
+setupEditAttach();
 setupCharacters();
 updateRefsNote();
 showEmpty();

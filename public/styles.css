@@ -59,6 +59,24 @@ body {
 }
 .mic:hover { background: var(--accent-weak); }
 .mic.recording { background: #fee2e2; border-color: #ef4444; animation: pulse 1.1s infinite; }
+
+.attach {
+  position: absolute; top: 52px; right: 10px;
+  width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); cursor: pointer; font-size: 17px; line-height: 1;
+  transition: background .2s ease;
+}
+.attach:hover { background: var(--accent-weak); }
+
+.edit-preview {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; border: 1px solid var(--accent); border-radius: 12px;
+  background: var(--accent-weak);
+}
+.edit-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+.edit-thumb { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.edit-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.edit-hint { font-size: 12px; color: var(--muted); }
 @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 
 /* Reference upload zones */

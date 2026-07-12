@@ -26,6 +26,14 @@
         <textarea id="prompt" rows="4"
           placeholder="Опишите изображение — или оставьте пустым, и я соберу из референсов.  (Ctrl / ⌘ + Enter — сгенерировать)"></textarea>
         <button id="mic" class="mic" type="button" title="Голосовой ввод" aria-label="Голосовой ввод">🎙️</button>
+        <button id="attach" class="attach" type="button" title="Прикрепить фото для редактирования" aria-label="Прикрепить фото">📎</button>
+        <input type="file" id="attach-input" accept="image/*" hidden />
+      </div>
+      <div id="edit-preview" class="edit-preview" hidden>
+        <span class="edit-label">Редактирование:</span>
+        <div class="edit-thumb" id="edit-thumb"></div>
+        <button id="edit-remove" class="linkbtn danger" type="button">✕ убрать</button>
+        <span class="edit-hint">Опишите в промпте, что изменить</span>
       </div>
 
       <div id="enhance-row" class="enhance-row" hidden>
