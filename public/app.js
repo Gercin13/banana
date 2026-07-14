@@ -49,7 +49,7 @@ const PRICES = {
   draft:   { "1K": 0.045, "2K": 0.09 },
   quality: { "1K": 0.045, "2K": 0.09 },
 };
-const VIDEO_PRICES = { 5: 0.15, 8: 0.24 }; // rough estimate for WAN 2.2 i2v
+const VIDEO_PRICES = { 5: 0.30, 8: 0.48 }; // WAN 2.2 i2v 720p actual pricing
 function updateCost() {
   if (!els.cost) return;
   if (state.genMode === "video") {
