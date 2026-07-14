@@ -67,6 +67,19 @@ body {
 /* Video frames upload */
 .video-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
+/* Video controls & negative prompt */
+.video-controls { margin-top: 16px; }
+.video-neg-prompt { margin-top: 16px; }
+.video-neg-prompt label { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 8px; }
+.video-neg-prompt label .hint { text-transform: none; letter-spacing: 0; font-weight: 400; opacity: .8; }
+.video-neg-prompt textarea {
+  width: 100%; resize: vertical; min-height: 48px;
+  font: inherit; font-size: 14px; line-height: 1.4; color: var(--text);
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px; outline: none;
+}
+.video-neg-prompt textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-weak); }
+
 /* Video player in cards */
 .card video { display: block; width: 100%; height: auto; border-radius: 0; }
 

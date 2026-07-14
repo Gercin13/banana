@@ -20,6 +20,7 @@ const state = {
   editImage: null, // { mimeType, dataBase64, thumbUrl } — for pure image editing
   videoFirstFrame: null, // { mimeType, dataBase64, thumbUrl }
   videoLastFrame: null,  // { mimeType, dataBase64, thumbUrl }
+  videoDuration: 5,      // 5 or 8 seconds
   characterId: "",
   characters: [],
   busy: false,
@@ -39,6 +40,7 @@ const els = {
   settingsImage: $("#settings-image"), settingsVideo: $("#settings-video"),
   vfirstDrop: $("#vfirst-drop"), vfirstInput: $("#vfirst-input"), vfirstThumbs: $("#vfirst-thumbs"),
   vlastDrop: $("#vlast-drop"), vlastInput: $("#vlast-input"), vlastThumbs: $("#vlast-thumbs"),
+  vdurations: $("#vdurations"), negPrompt: $("#neg-prompt"),
 };
 
 // Rough per-image cost estimate (USD, WaveSpeed ~2026) — for display only.
@@ -47,11 +49,12 @@ const PRICES = {
   draft:   { "1K": 0.045, "2K": 0.09 },
   quality: { "1K": 0.045, "2K": 0.09 },
 };
-const VIDEO_PRICE = 0.15; // rough estimate for WAN 2.2 i2v
+const VIDEO_PRICES = { 5: 0.15, 8: 0.24 }; // rough estimate for WAN 2.2 i2v
 function updateCost() {
   if (!els.cost) return;
   if (state.genMode === "video") {
-    els.cost.textContent = `≈ $${VIDEO_PRICE.toFixed(2)} за видео · оценка`;
+    const vp = VIDEO_PRICES[state.videoDuration] || 0.15;
+    els.cost.textContent = `≈ $${vp.toFixed(2)} за видео (${state.videoDuration} сек) · оценка`;
   } else {
     const per = (PRICES[state.tier] && PRICES[state.tier][state.size]) || 0;
     els.cost.textContent = `≈ $${(per * state.count).toFixed(2)} за генерацию · оценка`;
@@ -117,6 +120,7 @@ function setMode(mode) {
   if (els.modeVideo) els.modeVideo.className = "mode-btn" + (mode === "video" ? " active" : "");
   if (els.settingsImage) els.settingsImage.hidden = mode !== "image";
   if (els.settingsVideo) els.settingsVideo.hidden = mode !== "video";
+  if (mode === "video") renderDurations();
   els.prompt.placeholder = mode === "video"
     ? "Опишите, что должно происходить в видео…  (Ctrl / ⌘ + Enter — сгенерировать)"
     : "Опишите изображение — или оставьте пустым, и я соберу из референсов.  (Ctrl / ⌘ + Enter — сгенерировать)";
@@ -165,6 +169,20 @@ function setupVideoFrames() {
   setupVideoFrameZone("videoLastFrame", els.vlastDrop, els.vlastInput, els.vlastThumbs);
 }
 
+// ---- Video duration selector -----------------------------------------------
+function renderDurations() {
+  if (!els.vdurations) return;
+  els.vdurations.innerHTML = "";
+  for (const d of [5, 8]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "seg" + (d === state.videoDuration ? " active" : "");
+    b.textContent = d + " сек";
+    b.onclick = () => { state.videoDuration = d; renderDurations(); updateCost(); };
+    els.vdurations.appendChild(b);
+  }
+}
+
 // ---- Capabilities (from backend, with fallback) ---------------------------
 async function loadCapabilities() {
   try {
@@ -175,7 +193,7 @@ async function loadCapabilities() {
     // Show the Atomesus toggle only when the server has the key configured.
     if (d.atomesusEnhance && els.enhanceRow) els.enhanceRow.hidden = false;
   } catch { /* keep defaults */ }
-  renderAspects(); renderCounts(); renderTiers(); renderSizes(); updateCost();
+  renderAspects(); renderCounts(); renderTiers(); renderSizes(); renderDurations(); updateCost();
 }
 
 // ---- Voice input (optional; hidden if unsupported) ------------------------
@@ -492,6 +510,8 @@ async function generate() {
       body: JSON.stringify(state.genMode === "video" ? {
         genMode: "video",
         prompt,
+        negativePrompt: els.negPrompt ? els.negPrompt.value.trim() : "",
+        duration: state.videoDuration,
         enhance: !!(els.enhance && els.enhance.checked),
         firstFrame: state.videoFirstFrame ? { mimeType: state.videoFirstFrame.mimeType, dataBase64: state.videoFirstFrame.dataBase64 } : null,
         lastFrame: state.videoLastFrame ? { mimeType: state.videoLastFrame.mimeType, dataBase64: state.videoLastFrame.dataBase64 } : null,
