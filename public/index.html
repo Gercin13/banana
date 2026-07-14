@@ -15,13 +15,20 @@
       <span class="logo" aria-hidden="true">◗</span>
       <div>
         <h1>Nano Studio</h1>
-        <p class="tagline">Генерация изображений · Gemini Nano Banana</p>
+        <p class="tagline">Генерация изображений и видео · WaveSpeed AI</p>
       </div>
     </div>
   </header>
 
   <main class="container">
     <section class="composer">
+      <!-- Mode toggle: Image / Video -->
+      <div class="mode-toggle">
+        <button id="mode-image" class="mode-btn active" type="button">🖼 Изображение</button>
+        <button id="mode-video" class="mode-btn" type="button">🎬 Видео</button>
+      </div>
+
+      <!-- Prompt (shared) -->
       <div class="prompt-wrap">
         <textarea id="prompt" rows="4"
           placeholder="Опишите изображение — или оставьте пустым, и я соберу из референсов.  (Ctrl / ⌘ + Enter — сгенерировать)"></textarea>
@@ -41,85 +48,76 @@
           <input type="checkbox" id="enhance" />
           <span>✨ Улучшить промпт через Atomesus</span>
         </label>
-        <span class="enhance-hint">расширит ваш текст в детальный промпт (работает, когда поле не пустое)</span>
+        <span class="enhance-hint">расширит ваш текст (работает, когда поле не пустое)</span>
       </div>
 
-      <div class="characters">
-        <label>Персонаж <span class="hint">сохранённое лицо — подставится автоматически</span></label>
-        <div class="char-row">
-          <select id="character" class="char-select"><option value="">— не выбран —</option></select>
-          <button id="save-char" class="linkbtn" type="button">💾 Сохранить лицо как персонажа</button>
-          <button id="del-char" class="linkbtn danger" type="button" hidden>✕ удалить</button>
-        </div>
-        <div class="char-preview thumbs" id="char-preview"></div>
-      </div>
+      <!-- Collapsible settings panel -->
+      <details class="settings-panel" id="settings-panel">
+        <summary class="settings-toggle">⚙️ Настройки</summary>
 
-      <div class="refs">
-        <div class="refzone">
-          <label>Лицо / личность <span class="hint">кто это</span></label>
-          <div class="dropzone" id="face-drop" tabindex="0" role="button" aria-label="Загрузить референс лица">
-            <input type="file" id="face-input" accept="image/*" multiple hidden />
-            <span class="dz-hint">Фото лица — перетащите или нажмите</span>
-            <div class="thumbs" id="face-thumbs"></div>
+        <!-- IMAGE settings (shown when mode=image) -->
+        <div id="settings-image" class="settings-content">
+          <div class="characters">
+            <label>Персонаж <span class="hint">сохранённое лицо — подставится автоматически</span></label>
+            <div class="char-row">
+              <select id="character" class="char-select"><option value="">— не выбран —</option></select>
+              <button id="save-char" class="linkbtn" type="button">💾 Сохранить лицо как персонажа</button>
+              <button id="del-char" class="linkbtn danger" type="button" hidden>✕ удалить</button>
+            </div>
+            <div class="char-preview thumbs" id="char-preview"></div>
           </div>
-        </div>
-        <div class="refzone">
-          <label>Позы <span class="hint">как стоит/сидит</span></label>
-          <div class="dropzone" id="pose-drop" tabindex="0" role="button" aria-label="Загрузить референс позы">
-            <input type="file" id="pose-input" accept="image/*" multiple hidden />
-            <span class="dz-hint">Фото позы — перетащите или нажмите</span>
-            <div class="thumbs" id="pose-thumbs"></div>
-          </div>
-        </div>
-        <div class="refzone">
-          <label>Одежда <span class="hint">во что одет</span></label>
-          <div class="dropzone" id="garment-drop" tabindex="0" role="button" aria-label="Загрузить референс одежды">
-            <input type="file" id="garment-input" accept="image/*" multiple hidden />
-            <span class="dz-hint">Фото одежды — перетащите или нажмите</span>
-            <div class="thumbs" id="garment-thumbs"></div>
-          </div>
-        </div>
-        <div class="refzone">
-          <label>Продукт <span class="hint">что в кадре</span></label>
-          <div class="dropzone" id="product-drop" tabindex="0" role="button" aria-label="Загрузить референс продукта">
-            <input type="file" id="product-input" accept="image/*" multiple hidden />
-            <span class="dz-hint">Фото продукта — перетащите или нажмите</span>
-            <div class="thumbs" id="product-thumbs"></div>
-          </div>
-        </div>
-        <div class="refzone">
-          <label>Фон <span class="hint">окружение или пусто = белый</span></label>
-          <div class="dropzone" id="background-drop" tabindex="0" role="button" aria-label="Загрузить референс фона">
-            <input type="file" id="background-input" accept="image/*" multiple hidden />
-            <span class="dz-hint">Фото фона — перетащите или нажмите</span>
-            <div class="thumbs" id="background-thumbs"></div>
-          </div>
-        </div>
-        <p class="refs-note" id="refs-note">Референсы опциональны · суммарно до 10</p>
-      </div>
 
-      <div class="controls">
-        <div class="control">
-          <label>Соотношение сторон</label>
-          <div id="aspects" class="pills"></div>
+          <div class="refs">
+            <div class="refzone">
+              <label>Лицо / личность <span class="hint">кто это</span></label>
+              <div class="dropzone" id="face-drop" tabindex="0" role="button"><input type="file" id="face-input" accept="image/*" multiple hidden /><span class="dz-hint">Фото лица</span><div class="thumbs" id="face-thumbs"></div></div>
+            </div>
+            <div class="refzone">
+              <label>Позы <span class="hint">как стоит/сидит</span></label>
+              <div class="dropzone" id="pose-drop" tabindex="0" role="button"><input type="file" id="pose-input" accept="image/*" multiple hidden /><span class="dz-hint">Фото позы</span><div class="thumbs" id="pose-thumbs"></div></div>
+            </div>
+            <div class="refzone">
+              <label>Одежда <span class="hint">во что одет</span></label>
+              <div class="dropzone" id="garment-drop" tabindex="0" role="button"><input type="file" id="garment-input" accept="image/*" multiple hidden /><span class="dz-hint">Фото одежды</span><div class="thumbs" id="garment-thumbs"></div></div>
+            </div>
+            <div class="refzone">
+              <label>Продукт <span class="hint">что в кадре</span></label>
+              <div class="dropzone" id="product-drop" tabindex="0" role="button"><input type="file" id="product-input" accept="image/*" multiple hidden /><span class="dz-hint">Фото продукта</span><div class="thumbs" id="product-thumbs"></div></div>
+            </div>
+            <div class="refzone">
+              <label>Фон <span class="hint">окружение или пусто = белый</span></label>
+              <div class="dropzone" id="background-drop" tabindex="0" role="button"><input type="file" id="background-input" accept="image/*" multiple hidden /><span class="dz-hint">Фото фона</span><div class="thumbs" id="background-thumbs"></div></div>
+            </div>
+            <p class="refs-note" id="refs-note">Референсы опциональны · суммарно до 10</p>
+          </div>
+
+          <div class="controls">
+            <div class="control">
+              <label>Соотношение сторон</label>
+              <div id="aspects" class="pills"></div>
+            </div>
+            <div class="control-row">
+              <div class="control"><label>Количество</label><div id="counts" class="segmented"></div></div>
+              <div class="control"><label>Качество</label><div id="tiers" class="segmented"></div></div>
+              <div class="control"><label>Разрешение</label><div id="sizes" class="segmented"></div><span class="hint-note">2K — тяжелее и дороже</span></div>
+            </div>
+          </div>
         </div>
 
-        <div class="control-row">
-          <div class="control">
-            <label>Количество</label>
-            <div id="counts" class="segmented"></div>
-          </div>
-          <div class="control">
-            <label>Качество</label>
-            <div id="tiers" class="segmented"></div>
-          </div>
-          <div class="control">
-            <label>Разрешение</label>
-            <div id="sizes" class="segmented"></div>
-            <span class="hint-note">2K/4K — тяжелее и дороже</span>
+        <!-- VIDEO settings (shown when mode=video) -->
+        <div id="settings-video" class="settings-content" hidden>
+          <div class="video-frames">
+            <div class="refzone">
+              <label>Первый кадр <span class="hint">обязателен</span></label>
+              <div class="dropzone" id="vfirst-drop" tabindex="0" role="button"><input type="file" id="vfirst-input" accept="image/*" hidden /><span class="dz-hint">Загрузите изображение</span><div class="thumbs" id="vfirst-thumbs"></div></div>
+            </div>
+            <div class="refzone">
+              <label>Последний кадр <span class="hint">опционально</span></label>
+              <div class="dropzone" id="vlast-drop" tabindex="0" role="button"><input type="file" id="vlast-input" accept="image/*" hidden /><span class="dz-hint">Загрузите изображение</span><div class="thumbs" id="vlast-thumbs"></div></div>
+            </div>
           </div>
         </div>
-      </div>
+      </details>
 
       <p class="cost-estimate" id="cost-estimate"></p>
       <button id="generate" class="generate" type="button">Сгенерировать</button>

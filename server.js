@@ -14,7 +14,7 @@ import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
 import {
-  handleGenerate, handleHistory, handleDelete, healthPayload,
+  handleGenerate, handleGenerateVideo, handleHistory, handleDelete, healthPayload,
   handleListCharacters, handleSaveCharacter, handleDeleteCharacter,
 } from "./lib/handler.js";
 import { IMAGES_DIR } from "./lib/store.js";
@@ -37,7 +37,9 @@ app.use("/images", express.static(IMAGES_DIR, { maxAge: "1y", immutable: true })
 app.get("/api/health", (req, res) => res.json(healthPayload()));
 
 app.post("/api/generate", async (req, res) => {
-  const { status, body } = await handleGenerate(req.body, getUserId(req));
+  const genMode = req.body?.genMode; // "image" (default) or "video"
+  const handler = genMode === "video" ? handleGenerateVideo : handleGenerate;
+  const { status, body } = await handler(req.body, getUserId(req));
   res.status(status).json(body);
 });
 

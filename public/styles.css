@@ -43,6 +43,33 @@ body {
   padding: 20px; display: flex; flex-direction: column; gap: 20px;
 }
 
+/* Mode toggle (Image / Video) */
+.mode-toggle { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+.mode-btn {
+  flex: 1; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  padding: 10px 16px; border: none; background: var(--surface); color: var(--text);
+  transition: all .15s ease;
+}
+.mode-btn:hover { background: var(--accent-weak); }
+.mode-btn.active { background: var(--accent); color: #fff; }
+
+/* Settings panel (collapsible) */
+.settings-panel { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.settings-toggle {
+  padding: 12px 16px; font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer; color: var(--muted); list-style: none; user-select: none;
+}
+.settings-toggle::-webkit-details-marker { display: none; }
+.settings-toggle::before { content: '▸ '; }
+.settings-panel[open] .settings-toggle::before { content: '▾ '; }
+.settings-content { padding: 0 16px 16px; }
+
+/* Video frames upload */
+.video-frames { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* Video player in cards */
+.card video { display: block; width: 100%; height: auto; border-radius: 0; }
+
 .prompt-wrap { position: relative; }
 #prompt {
   width: 100%; resize: vertical; min-height: 96px;

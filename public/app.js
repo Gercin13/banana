@@ -2,6 +2,7 @@
 const $ = (s) => document.querySelector(s);
 
 const state = {
+  genMode: "image", // "image" or "video"
   aspect: "1:1",
   count: 1,
   tier: "draft",
@@ -17,6 +18,8 @@ const state = {
   productRefs: [],
   backgroundRefs: [],
   editImage: null, // { mimeType, dataBase64, thumbUrl } — for pure image editing
+  videoFirstFrame: null, // { mimeType, dataBase64, thumbUrl }
+  videoLastFrame: null,  // { mimeType, dataBase64, thumbUrl }
   characterId: "",
   characters: [],
   busy: false,
@@ -32,6 +35,10 @@ const els = {
   editPreview: $("#edit-preview"), editThumb: $("#edit-thumb"), editRemove: $("#edit-remove"),
   character: $("#character"), saveChar: $("#save-char"), delChar: $("#del-char"), charPreview: $("#char-preview"),
   cost: $("#cost-estimate"),
+  modeImage: $("#mode-image"), modeVideo: $("#mode-video"),
+  settingsImage: $("#settings-image"), settingsVideo: $("#settings-video"),
+  vfirstDrop: $("#vfirst-drop"), vfirstInput: $("#vfirst-input"), vfirstThumbs: $("#vfirst-thumbs"),
+  vlastDrop: $("#vlast-drop"), vlastInput: $("#vlast-input"), vlastThumbs: $("#vlast-thumbs"),
 };
 
 // Rough per-image cost estimate (USD, WaveSpeed ~2026) — for display only.
@@ -40,10 +47,15 @@ const PRICES = {
   draft:   { "1K": 0.045, "2K": 0.09 },
   quality: { "1K": 0.045, "2K": 0.09 },
 };
+const VIDEO_PRICE = 0.15; // rough estimate for WAN 2.2 i2v
 function updateCost() {
   if (!els.cost) return;
-  const per = (PRICES[state.tier] && PRICES[state.tier][state.size]) || 0;
-  els.cost.textContent = `≈ $${(per * state.count).toFixed(2)} за генерацию · оценка`;
+  if (state.genMode === "video") {
+    els.cost.textContent = `≈ $${VIDEO_PRICE.toFixed(2)} за видео · оценка`;
+  } else {
+    const per = (PRICES[state.tier] && PRICES[state.tier][state.size]) || 0;
+    els.cost.textContent = `≈ $${(per * state.count).toFixed(2)} за генерацию · оценка`;
+  }
 }
 
 // ---- Controls -------------------------------------------------------------
@@ -96,6 +108,61 @@ function renderSizes() {
     if (!disabled) b.onclick = () => { state.size = s; renderSizes(); updateCost(); };
     els.sizes.appendChild(b);
   }
+}
+
+// ---- Mode toggle (Image / Video) ------------------------------------------
+function setMode(mode) {
+  state.genMode = mode;
+  if (els.modeImage) els.modeImage.className = "mode-btn" + (mode === "image" ? " active" : "");
+  if (els.modeVideo) els.modeVideo.className = "mode-btn" + (mode === "video" ? " active" : "");
+  if (els.settingsImage) els.settingsImage.hidden = mode !== "image";
+  if (els.settingsVideo) els.settingsVideo.hidden = mode !== "video";
+  els.prompt.placeholder = mode === "video"
+    ? "Опишите, что должно происходить в видео…  (Ctrl / ⌘ + Enter — сгенерировать)"
+    : "Опишите изображение — или оставьте пустым, и я соберу из референсов.  (Ctrl / ⌘ + Enter — сгенерировать)";
+  updateCost();
+}
+function setupModeToggle() {
+  if (els.modeImage) els.modeImage.onclick = () => setMode("image");
+  if (els.modeVideo) els.modeVideo.onclick = () => setMode("video");
+}
+
+// ---- Video frame uploads --------------------------------------------------
+function renderVideoThumb(stateKey, thumbsEl) {
+  if (!thumbsEl) return;
+  thumbsEl.innerHTML = "";
+  const ref = state[stateKey];
+  if (!ref) return;
+  const t = document.createElement("div"); t.className = "thumb";
+  const im = document.createElement("img"); im.src = ref.thumbUrl; im.alt = "";
+  const rm = document.createElement("button");
+  rm.className = "rm"; rm.type = "button"; rm.textContent = "×";
+  rm.onclick = (e) => { e.stopPropagation(); state[stateKey] = null; renderVideoThumb(stateKey, thumbsEl); };
+  t.append(im, rm);
+  thumbsEl.appendChild(t);
+}
+function setupVideoFrameZone(stateKey, drop, input, thumbs) {
+  if (!drop) return;
+  drop.addEventListener("click", (e) => { if (!e.target.closest(".rm")) input.click(); });
+  input.addEventListener("change", async () => {
+    const f = input.files[0]; input.value = "";
+    if (!f || !f.type.startsWith("image/")) return;
+    try { state[stateKey] = await fileToRef(f); } catch { return; }
+    renderVideoThumb(stateKey, thumbs);
+  });
+  drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("dragover"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+  drop.addEventListener("drop", async (e) => {
+    e.preventDefault(); drop.classList.remove("dragover");
+    const f = e.dataTransfer.files[0];
+    if (!f || !f.type.startsWith("image/")) return;
+    try { state[stateKey] = await fileToRef(f); } catch { return; }
+    renderVideoThumb(stateKey, thumbs);
+  });
+}
+function setupVideoFrames() {
+  setupVideoFrameZone("videoFirstFrame", els.vfirstDrop, els.vfirstInput, els.vfirstThumbs);
+  setupVideoFrameZone("videoLastFrame", els.vlastDrop, els.vlastInput, els.vlastThumbs);
 }
 
 // ---- Capabilities (from backend, with fallback) ---------------------------
@@ -308,18 +375,26 @@ function setupCharacters() {
 }
 
 // ---- Image cards + rendering ----------------------------------------------
-function imageCard(url, { downloadName, onDelete } = {}) {
+function mediaCard(url, { downloadName, onDelete, isVideo } = {}) {
   const card = document.createElement("div");
   card.className = "card";
-  const view = document.createElement("a");
-  view.href = url; view.target = "_blank"; view.rel = "noopener noreferrer";
-  const im = document.createElement("img");
-  im.src = url; im.alt = ""; im.loading = "lazy";
-  view.appendChild(im);
+  if (isVideo) {
+    const vid = document.createElement("video");
+    vid.src = url; vid.controls = true; vid.loop = true; vid.muted = true;
+    vid.autoplay = true; vid.playsInline = true; vid.preload = "metadata";
+    card.appendChild(vid);
+  } else {
+    const view = document.createElement("a");
+    view.href = url; view.target = "_blank"; view.rel = "noopener noreferrer";
+    const im = document.createElement("img");
+    im.src = url; im.alt = ""; im.loading = "lazy";
+    view.appendChild(im);
+    card.appendChild(view);
+  }
   const dl = document.createElement("a");
   dl.className = "download"; dl.href = url; dl.download = downloadName || "";
   dl.textContent = "Скачать";
-  card.append(view, dl);
+  card.appendChild(dl);
   if (onDelete) {
     const del = document.createElement("button");
     del.className = "del"; del.type = "button"; del.textContent = "×"; del.title = "Удалить";
@@ -328,6 +403,8 @@ function imageCard(url, { downloadName, onDelete } = {}) {
   }
   return card;
 }
+// Backward compat alias
+function imageCard(url, opts) { return mediaCard(url, opts); }
 function showEmpty() {
   els.gallery.innerHTML = '<div class="empty">Здесь появятся сгенерированные изображения</div>';
 }
@@ -335,9 +412,13 @@ function skeletons(n) {
   els.gallery.innerHTML = "";
   for (let i = 0; i < n; i++) { const d = document.createElement("div"); d.className = "card skeleton"; els.gallery.appendChild(d); }
 }
-function renderResults(images) {
+function renderResults(images, mode) {
   els.gallery.innerHTML = "";
-  images.forEach((img, i) => els.gallery.appendChild(imageCard(img.url, { downloadName: `nano-${Date.now()}-${i + 1}.png` })));
+  const isVideo = mode === "video";
+  images.forEach((img, i) => {
+    const ext = isVideo ? "mp4" : "png";
+    els.gallery.appendChild(mediaCard(img.url, { downloadName: `nano-${Date.now()}-${i + 1}.${ext}`, isVideo }));
+  });
 }
 
 // ---- History --------------------------------------------------------------
@@ -348,9 +429,12 @@ async function loadHistory() {
     els.history.innerHTML = "";
     if (!items.length) { els.history.innerHTML = '<div class="empty">История пуста</div>'; return; }
     for (const rec of items) {
+      const isVideo = rec.mode === "video" || (rec.images?.[0]?.mimeType || "").includes("video");
       for (const img of rec.images || []) {
-        els.history.appendChild(imageCard(img.url, {
-          downloadName: `nano-${rec.id}.png`,
+        const ext = isVideo ? "mp4" : "png";
+        els.history.appendChild(mediaCard(img.url, {
+          downloadName: `nano-${rec.id}.${ext}`,
+          isVideo,
           onDelete: async () => {
             try { await fetch(`/api/history/${rec.id}`, { method: "DELETE" }); } catch {}
             loadHistory();
@@ -373,15 +457,30 @@ function refsPayload(zoneKey) {
 async function generate() {
   if (state.busy) return;
   const prompt = els.prompt.value.trim();
-  if (state.editImage && !prompt) {
-    els.status.textContent = "Опишите, что изменить на прикреплённом фото.";
-    els.prompt.focus();
-    return;
+  // Video mode validations
+  if (state.genMode === "video") {
+    if (!state.videoFirstFrame) {
+      els.status.textContent = "Добавьте изображение первого кадра в настройках.";
+      return;
+    }
+    if (!prompt) {
+      els.status.textContent = "Опишите, что должно происходить в видео.";
+      els.prompt.focus();
+      return;
+    }
   }
-  if (!prompt && totalRefs() === 0 && !state.characterId && !state.editImage) {
-    els.status.textContent = "Введите промпт, добавьте референс или выберите персонажа.";
-    els.prompt.focus();
-    return;
+  // Image mode validations
+  if (state.genMode === "image") {
+    if (state.editImage && !prompt) {
+      els.status.textContent = "Опишите, что изменить на прикреплённом фото.";
+      els.prompt.focus();
+      return;
+    }
+    if (!prompt && totalRefs() === 0 && !state.characterId && !state.editImage) {
+      els.status.textContent = "Введите промпт, добавьте референс или выберите персонажа.";
+      els.prompt.focus();
+      return;
+    }
   }
   els.status.textContent = "";
   setBusy(true);
@@ -390,7 +489,14 @@ async function generate() {
     const r = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(state.genMode === "video" ? {
+        genMode: "video",
+        prompt,
+        enhance: !!(els.enhance && els.enhance.checked),
+        firstFrame: state.videoFirstFrame ? { mimeType: state.videoFirstFrame.mimeType, dataBase64: state.videoFirstFrame.dataBase64 } : null,
+        lastFrame: state.videoLastFrame ? { mimeType: state.videoLastFrame.mimeType, dataBase64: state.videoLastFrame.dataBase64 } : null,
+      } : {
+        genMode: "image",
         prompt,
         aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
         enhance: !!(els.enhance && els.enhance.checked),
@@ -405,8 +511,8 @@ async function generate() {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Ошибка генерации");
-    renderResults(d.images);
-    const bits = [`Готово: ${d.images.length} изобр.`];
+    renderResults(d.images, d.mode);
+    const bits = [d.mode === "video" ? "Готово: видео" : `Готово: ${d.images.length} изобр.`];
     if (d.mode === "edit") bits.push("режим: редактирование фото");
     else if (d.mode === "auto") bits.push("режим: авто из референсов");
     if (d.enhanced) bits.push("промпт улучшен Atomesus");
@@ -426,9 +532,11 @@ els.prompt.addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && 
 if (els.refreshHistory) els.refreshHistory.onclick = loadHistory;
 
 loadCapabilities();
+setupModeToggle();
 setupVoice();
 setupRefs();
 setupEditAttach();
+setupVideoFrames();
 setupCharacters();
 updateRefsNote();
 showEmpty();
