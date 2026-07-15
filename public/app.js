@@ -432,6 +432,14 @@ function mediaCard(url, { downloadName, onDelete, isVideo } = {}) {
   dl.className = "download"; dl.href = url; dl.download = downloadName || "";
   dl.textContent = "Скачать";
   card.appendChild(dl);
+  // Upscale button — shows on hover, triggers server-side upscale.
+  if (url.startsWith("/images/")) {
+    const up = document.createElement("button");
+    up.className = "upscale"; up.type = "button"; up.textContent = "⬆ Улучшить";
+    up.title = isVideo ? "Апскейл видео → 1080p" : "Апскейл изображения → 4K";
+    up.onclick = () => doUpscale(url, isVideo, up);
+    card.appendChild(up);
+  }
   if (onDelete) {
     const del = document.createElement("button");
     del.className = "del"; del.type = "button"; del.textContent = "×"; del.title = "Удалить";
@@ -440,6 +448,22 @@ function mediaCard(url, { downloadName, onDelete, isVideo } = {}) {
   }
   return card;
 }
+// ---- Upscale (image/video) -------------------------------------------------
+async function doUpscale(url, isVideo, btn) {
+  btn.textContent = "⬆ …"; btn.classList.add("busy"); btn.disabled = true;
+  try {
+    const body = isVideo ? { videoUrl: url, targetResolution: "1080p" } : { imageUrl: url, targetResolution: "4k" };
+    const r = await fetch("/api/upscale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Upscale error");
+    btn.textContent = "✅"; btn.classList.remove("busy");
+    loadHistory();
+  } catch (e) {
+    btn.textContent = "⬆ ⚠"; btn.classList.remove("busy"); btn.disabled = false;
+    els.status.textContent = "⚠ Апскейл: " + (e.message || e);
+  }
+}
+
 // Backward compat alias
 function imageCard(url, opts) { return mediaCard(url, opts); }
 function showEmpty() {
