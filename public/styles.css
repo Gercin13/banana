@@ -160,6 +160,17 @@ body {
 .thumb.static { width: 52px; height: 52px; }
 .linkbtn.danger { color: #ef4444; }
 
+/* NVIDIA alternate engine — separate toggle button */
+.nvidia-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nvidia-btn {
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); transition: all .15s ease;
+}
+.nvidia-btn:hover { border-color: #76b900; }
+.nvidia-btn.active { background: #76b900; border-color: #76b900; color: #fff; }
+.dimmed { opacity: .35; pointer-events: none; filter: saturate(.5); }
+
 .controls { display: flex; flex-direction: column; gap: 18px; }
 .control-row { display: flex; gap: 28px; flex-wrap: wrap; }
 .control label {

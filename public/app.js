@@ -23,6 +23,7 @@ const state = {
   videoDuration: 5,      // 5 or 8 seconds
   characterId: "",
   characters: [],
+  useNvidia: false, // separate alternate engine (NVIDIA FLUX.2 Klein) — text-only
   busy: false,
 };
 
@@ -41,6 +42,8 @@ const els = {
   vfirstDrop: $("#vfirst-drop"), vfirstInput: $("#vfirst-input"), vfirstThumbs: $("#vfirst-thumbs"),
   vlastDrop: $("#vlast-drop"), vlastInput: $("#vlast-input"), vlastThumbs: $("#vlast-thumbs"),
   vdurations: $("#vdurations"), negPrompt: $("#neg-prompt"),
+  nvidiaToggle: $("#nvidia-toggle"), imageControls: $("#image-controls"),
+  charactersBlock: document.querySelector(".characters"), refsBlock: document.querySelector(".refs"),
 };
 
 // Rough per-image cost estimate (USD, WaveSpeed ~2026) — for display only.
@@ -55,6 +58,8 @@ function updateCost() {
   if (state.genMode === "video") {
     const vp = VIDEO_PRICES[state.videoDuration] || 0.15;
     els.cost.textContent = `≈ $${vp.toFixed(2)} за видео (${state.videoDuration} сек) · оценка`;
+  } else if (state.useNvidia) {
+    els.cost.textContent = "бесплатно · кредиты триала NVIDIA (1 изображение, 1024×1024)";
   } else {
     const per = (PRICES[state.tier] && PRICES[state.tier][state.size]) || 0;
     els.cost.textContent = `≈ $${(per * state.count).toFixed(2)} за генерацию · оценка`;
@@ -181,6 +186,20 @@ function renderDurations() {
     b.onclick = () => { state.videoDuration = d; renderDurations(); updateCost(); };
     els.vdurations.appendChild(b);
   }
+}
+
+// ---- NVIDIA alternate engine toggle (separate button; text-only, no refs) --
+function setupNvidiaToggle() {
+  if (!els.nvidiaToggle) return;
+  els.nvidiaToggle.onclick = () => {
+    state.useNvidia = !state.useNvidia;
+    els.nvidiaToggle.classList.toggle("active", state.useNvidia);
+    const dim = state.useNvidia;
+    if (els.imageControls) els.imageControls.classList.toggle("dimmed", dim);
+    if (els.charactersBlock) els.charactersBlock.classList.toggle("dimmed", dim);
+    if (els.refsBlock) els.refsBlock.classList.toggle("dimmed", dim);
+    updateCost();
+  };
 }
 
 // ---- Capabilities (from backend, with fallback) ---------------------------
@@ -489,15 +508,24 @@ async function generate() {
   }
   // Image mode validations
   if (state.genMode === "image") {
-    if (state.editImage && !prompt) {
-      els.status.textContent = "Опишите, что изменить на прикреплённом фото.";
-      els.prompt.focus();
-      return;
-    }
-    if (!prompt && totalRefs() === 0 && !state.characterId && !state.editImage) {
-      els.status.textContent = "Введите промпт, добавьте референс или выберите персонажа.";
-      els.prompt.focus();
-      return;
+    if (state.useNvidia) {
+      // NVIDIA (FLUX.2 Klein, free trial) is text-only — no refs, no character, no edit-image.
+      if (!prompt) {
+        els.status.textContent = "Введите промпт — для NVIDIA FLUX.2 референсы не используются.";
+        els.prompt.focus();
+        return;
+      }
+    } else {
+      if (state.editImage && !prompt) {
+        els.status.textContent = "Опишите, что изменить на прикреплённом фото.";
+        els.prompt.focus();
+        return;
+      }
+      if (!prompt && totalRefs() === 0 && !state.characterId && !state.editImage) {
+        els.status.textContent = "Введите промпт, добавьте референс или выберите персонажа.";
+        els.prompt.focus();
+        return;
+      }
     }
   }
   els.status.textContent = "";
@@ -518,15 +546,17 @@ async function generate() {
       } : {
         genMode: "image",
         prompt,
-        aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
+        aspectRatio: state.aspect, size: state.size, count: state.count,
+        tier: state.useNvidia ? "nvidia" : state.tier,
         enhance: !!(els.enhance && els.enhance.checked),
-        characterId: state.characterId || "",
-        editImage: state.editImage ? { mimeType: state.editImage.mimeType, dataBase64: state.editImage.dataBase64 } : null,
-        faceRefs: refsPayload("faceRefs"),
-        poseRefs: refsPayload("poseRefs"),
-        garmentRefs: refsPayload("garmentRefs"),
-        productRefs: refsPayload("productRefs"),
-        backgroundRefs: refsPayload("backgroundRefs"),
+        // NVIDIA (free trial) is text-only — deliberately send no refs/character/edit-image.
+        characterId: state.useNvidia ? "" : (state.characterId || ""),
+        editImage: state.useNvidia ? null : (state.editImage ? { mimeType: state.editImage.mimeType, dataBase64: state.editImage.dataBase64 } : null),
+        faceRefs: state.useNvidia ? [] : refsPayload("faceRefs"),
+        poseRefs: state.useNvidia ? [] : refsPayload("poseRefs"),
+        garmentRefs: state.useNvidia ? [] : refsPayload("garmentRefs"),
+        productRefs: state.useNvidia ? [] : refsPayload("productRefs"),
+        backgroundRefs: state.useNvidia ? [] : refsPayload("backgroundRefs"),
       }),
     });
     const d = await r.json();
@@ -535,6 +565,7 @@ async function generate() {
     const bits = [d.mode === "video" ? "Готово: видео" : `Готово: ${d.images.length} изобр.`];
     if (d.mode === "edit") bits.push("режим: редактирование фото");
     else if (d.mode === "auto") bits.push("режим: авто из референсов");
+    if (d.model) bits.push(`модель: ${d.model}`);
     if (d.enhanced) bits.push("промпт улучшен Atomesus");
     if (d.errors?.length) bits.push(`${d.errors.length} из ${state.count} не удалось`);
     els.status.textContent = bits.join(" · ");
@@ -558,6 +589,7 @@ setupRefs();
 setupEditAttach();
 setupVideoFrames();
 setupCharacters();
+setupNvidiaToggle();
 updateRefsNote();
 showEmpty();
 loadHistory();
