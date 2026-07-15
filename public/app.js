@@ -437,7 +437,7 @@ function mediaCard(url, { downloadName, onDelete, isVideo } = {}) {
     const up = document.createElement("button");
     up.className = "upscale"; up.type = "button"; up.textContent = "⬆ Улучшить";
     up.title = isVideo ? "Апскейл видео → 1080p" : "Апскейл изображения → 4K";
-    up.onclick = () => doUpscale(url, isVideo, up);
+    up.onclick = (e) => { e.stopPropagation(); showUpscaleMenu(url, isVideo, up); };
     card.appendChild(up);
   }
   if (onDelete) {
@@ -449,14 +449,43 @@ function mediaCard(url, { downloadName, onDelete, isVideo } = {}) {
   return card;
 }
 // ---- Upscale (image/video) -------------------------------------------------
-async function doUpscale(url, isVideo, btn) {
-  btn.textContent = "⬆ …"; btn.classList.add("busy"); btn.disabled = true;
+const UPSCALE_RES_IMAGE = ["2k", "4k", "8k"];
+const UPSCALE_RES_VIDEO = ["720p", "1080p", "2k", "4k"];
+
+function showUpscaleMenu(url, isVideo, btn) {
+  // Remove any existing menu first
+  document.querySelectorAll(".upscale-menu").forEach(m => m.remove());
+  const options = isVideo ? UPSCALE_RES_VIDEO : UPSCALE_RES_IMAGE;
+  const menu = document.createElement("div");
+  menu.className = "upscale-menu";
+  for (const res of options) {
+    const opt = document.createElement("button");
+    opt.type = "button";
+    opt.textContent = res.toUpperCase();
+    opt.onclick = (e) => { e.stopPropagation(); menu.remove(); doUpscale(url, isVideo, btn, res); };
+    menu.appendChild(opt);
+  }
+  btn.parentElement.appendChild(menu);
+  // Position near the button
+  const rect = btn.getBoundingClientRect();
+  const cardRect = btn.parentElement.getBoundingClientRect();
+  menu.style.left = (rect.left - cardRect.left) + "px";
+  menu.style.bottom = (cardRect.bottom - rect.top + 4) + "px";
+  // Close on outside click
+  setTimeout(() => {
+    const close = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", close); } };
+    document.addEventListener("click", close);
+  }, 0);
+}
+
+async function doUpscale(url, isVideo, btn, targetResolution) {
+  btn.textContent = "⬆ " + targetResolution.toUpperCase() + "…"; btn.classList.add("busy"); btn.disabled = true;
   try {
-    const body = isVideo ? { videoUrl: url, targetResolution: "1080p" } : { imageUrl: url, targetResolution: "4k" };
+    const body = isVideo ? { videoUrl: url, targetResolution } : { imageUrl: url, targetResolution };
     const r = await fetch("/api/upscale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Upscale error");
-    btn.textContent = "✅"; btn.classList.remove("busy");
+    btn.textContent = "✅ " + targetResolution.toUpperCase(); btn.classList.remove("busy");
     loadHistory();
   } catch (e) {
     btn.textContent = "⬆ ⚠"; btn.classList.remove("busy"); btn.disabled = false;
