@@ -8,7 +8,7 @@ const state = {
   tier: "draft",
   size: "1K",
   aspects: ["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"],
-  tiers: [{ id: "lite", label: "Быстро" }, { id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
+  tiers: [{ id: "nvidia", label: "Быстро" }, { id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
   sizes: ["1K", "2K"],
   maxImages: 4,
   maxRefs: 10,
@@ -23,7 +23,15 @@ const state = {
   videoDuration: 5,      // 5 or 8 seconds
   characterId: "",
   characters: [],
-  useNvidia: false, // separate alternate engine (NVIDIA FLUX.2 Klein) — text-only
+  // NVIDIA FLUX.1-dev params — used when tier === "nvidia" ("Быстро")
+  nvidiaMode: "base",
+  nvidiaRatio: "1:1",
+  nvidiaCfgScale: 3.5,
+  nvidiaSteps: 50,
+  nvidiaSeed: 0,
+  nvidiaRatios: ["1:1", "16:9", "9:16", "5:4", "4:5", "3:2", "2:3"],
+  nvidiaModes: ["base", "canny", "depth"],
+  nvidiaInputImage: null,
   busy: false,
 };
 
@@ -42,8 +50,15 @@ const els = {
   vfirstDrop: $("#vfirst-drop"), vfirstInput: $("#vfirst-input"), vfirstThumbs: $("#vfirst-thumbs"),
   vlastDrop: $("#vlast-drop"), vlastInput: $("#vlast-input"), vlastThumbs: $("#vlast-thumbs"),
   vdurations: $("#vdurations"), negPrompt: $("#neg-prompt"),
-  nvidiaToggle: $("#nvidia-toggle"), imageControls: $("#image-controls"),
-  charactersBlock: document.querySelector(".characters"), refsBlock: document.querySelector(".refs"),
+  imageControls: $("#image-controls"),
+  nvidiaSettings: $("#nvidia-settings"),
+  nvidiaModesBtns: $("#nvidia-modes"),
+  nvidiaRatiosBtns: $("#nvidia-ratios"),
+  nvidiaCfg: $("#nvidia-cfg"), cfgVal: $("#cfg-val"),
+  nvidiaStepsEl: $("#nvidia-steps"), stepsVal: $("#steps-val"),
+  nvidiaSeedEl: $("#nvidia-seed"),
+  nvidiaInputImageRow: $("#nvidia-input-image-row"),
+  nvidiaImgDrop: $("#nvidia-img-drop"), nvidiaImgInput: $("#nvidia-img-input"), nvidiaImgThumbs: $("#nvidia-img-thumbs"),
 };
 
 // Rough per-image cost estimate (USD, WaveSpeed ~2026) — for display only.
@@ -58,8 +73,8 @@ function updateCost() {
   if (state.genMode === "video") {
     const vp = VIDEO_PRICES[state.videoDuration] || 0.15;
     els.cost.textContent = `≈ $${vp.toFixed(2)} за видео (${state.videoDuration} сек) · оценка`;
-  } else if (state.useNvidia) {
-    els.cost.textContent = "бесплатно · кредиты триала NVIDIA (1 изображение, 1024×1024)";
+  } else if (state.tier === "nvidia") {
+    els.cost.textContent = "бесплатно · кредиты триала NVIDIA · 1 изображение";
   } else {
     const per = (PRICES[state.tier] && PRICES[state.tier][state.size]) || 0;
     els.cost.textContent = `≈ $${(per * state.count).toFixed(2)} за генерацию · оценка`;
@@ -98,15 +113,14 @@ function renderTiers() {
     b.textContent = t.label;
     b.onclick = () => {
       state.tier = t.id;
-      if (t.id === "lite") state.size = "1K"; // Lite supports 1K only
-      renderTiers(); renderSizes(); updateCost();
+      renderTiers(); renderSizes(); updateNvidiaVisibility(); updateCost();
     };
     els.tiers.appendChild(b);
   }
 }
 function renderSizes() {
   els.sizes.innerHTML = "";
-  const liteLock = state.tier === "lite"; // Lite supports 1K only
+  const liteLock = false; // no more lite tier
   for (const s of state.sizes) {
     const b = document.createElement("button");
     b.type = "button";
@@ -188,18 +202,74 @@ function renderDurations() {
   }
 }
 
-// ---- NVIDIA alternate engine toggle (separate button; text-only, no refs) --
-function setupNvidiaToggle() {
-  if (!els.nvidiaToggle) return;
-  els.nvidiaToggle.onclick = () => {
-    state.useNvidia = !state.useNvidia;
-    els.nvidiaToggle.classList.toggle("active", state.useNvidia);
-    const dim = state.useNvidia;
-    if (els.imageControls) els.imageControls.classList.toggle("dimmed", dim);
-    if (els.charactersBlock) els.charactersBlock.classList.toggle("dimmed", dim);
-    if (els.refsBlock) els.refsBlock.classList.toggle("dimmed", dim);
-    updateCost();
-  };
+// ---- NVIDIA FLUX.1-dev settings (shown when tier === "nvidia" = "Быстро") ----
+
+function updateNvidiaVisibility() {
+  const isNV = state.tier === "nvidia";
+  if (els.nvidiaSettings) els.nvidiaSettings.hidden = !isNV;
+  // Hide WaveSpeed controls (aspect/count/size) when NVIDIA is active
+  if (els.imageControls) els.imageControls.hidden = isNV;
+}
+
+function renderNvidiaModes() {
+  if (!els.nvidiaModesBtns) return;
+  els.nvidiaModesBtns.innerHTML = "";
+  for (const m of state.nvidiaModes) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "seg" + (m === state.nvidiaMode ? " active" : "");
+    b.textContent = m;
+    b.onclick = () => {
+      state.nvidiaMode = m;
+      renderNvidiaModes();
+      if (els.nvidiaInputImageRow) els.nvidiaInputImageRow.hidden = m === "base";
+    };
+    els.nvidiaModesBtns.appendChild(b);
+  }
+  if (els.nvidiaInputImageRow) els.nvidiaInputImageRow.hidden = state.nvidiaMode === "base";
+}
+
+function renderNvidiaRatios() {
+  if (!els.nvidiaRatiosBtns) return;
+  els.nvidiaRatiosBtns.innerHTML = "";
+  for (const r of state.nvidiaRatios) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pill" + (r === state.nvidiaRatio ? " active" : "");
+    b.textContent = r;
+    b.onclick = () => { state.nvidiaRatio = r; renderNvidiaRatios(); };
+    els.nvidiaRatiosBtns.appendChild(b);
+  }
+}
+
+function setupNvidiaSettings() {
+  // Sliders
+  if (els.nvidiaCfg) {
+    els.nvidiaCfg.oninput = () => { state.nvidiaCfgScale = parseFloat(els.nvidiaCfg.value); if (els.cfgVal) els.cfgVal.textContent = state.nvidiaCfgScale.toFixed(1); };
+  }
+  if (els.nvidiaStepsEl) {
+    els.nvidiaStepsEl.oninput = () => { state.nvidiaSteps = parseInt(els.nvidiaStepsEl.value); if (els.stepsVal) els.stepsVal.textContent = state.nvidiaSteps; };
+  }
+  if (els.nvidiaSeedEl) {
+    els.nvidiaSeedEl.oninput = () => { state.nvidiaSeed = parseInt(els.nvidiaSeedEl.value) || 0; };
+  }
+  // Input image for canny/depth
+  if (els.nvidiaImgInput) {
+    if (els.nvidiaImgDrop) els.nvidiaImgDrop.onclick = (e) => { if (!e.target.closest(".rm")) els.nvidiaImgInput.click(); };
+    els.nvidiaImgInput.onchange = async () => {
+      const f = els.nvidiaImgInput.files[0]; els.nvidiaImgInput.value = "";
+      if (!f || !f.type.startsWith("image/")) return;
+      try { state.nvidiaInputImage = await fileToRef(f); } catch { return; }
+      if (els.nvidiaImgThumbs) {
+        els.nvidiaImgThumbs.innerHTML = "";
+        const t = document.createElement("div"); t.className = "thumb";
+        const im = document.createElement("img"); im.src = state.nvidiaInputImage.thumbUrl; im.alt = "";
+        const rm = document.createElement("button"); rm.className = "rm"; rm.type = "button"; rm.textContent = "×";
+        rm.onclick = (e) => { e.stopPropagation(); state.nvidiaInputImage = null; els.nvidiaImgThumbs.innerHTML = ""; };
+        t.append(im, rm); els.nvidiaImgThumbs.appendChild(t);
+      }
+    };
+  }
+  renderNvidiaModes();
+  renderNvidiaRatios();
 }
 
 // ---- Capabilities (from backend, with fallback) ---------------------------
@@ -209,10 +279,11 @@ async function loadCapabilities() {
     if (Array.isArray(d.aspectRatios) && d.aspectRatios.length) state.aspects = d.aspectRatios;
     if (Array.isArray(d.imageSizes) && d.imageSizes.length) state.sizes = d.imageSizes;
     if (Number.isInteger(d.maxImages)) state.maxImages = d.maxImages;
-    // Show the Atomesus toggle only when the server has the key configured.
+    if (Array.isArray(d.nvidiaRatios) && d.nvidiaRatios.length) state.nvidiaRatios = d.nvidiaRatios;
+    if (Array.isArray(d.nvidiaModes) && d.nvidiaModes.length) state.nvidiaModes = d.nvidiaModes;
     if (d.atomesusEnhance && els.enhanceRow) els.enhanceRow.hidden = false;
   } catch { /* keep defaults */ }
-  renderAspects(); renderCounts(); renderTiers(); renderSizes(); renderDurations(); updateCost();
+  renderAspects(); renderCounts(); renderTiers(); renderSizes(); renderDurations(); renderNvidiaRatios(); renderNvidiaModes(); updateNvidiaVisibility(); updateCost();
 }
 
 // ---- Voice input (optional; hidden if unsupported) ------------------------
@@ -561,14 +632,12 @@ async function generate() {
   }
   // Image mode validations
   if (state.genMode === "image") {
-    if (state.useNvidia) {
-      // NVIDIA (FLUX.2 Klein, free trial) is text-only — no refs, no character, no edit-image.
-      if (!prompt) {
-        els.status.textContent = "Введите промпт — для NVIDIA FLUX.2 референсы не используются.";
-        els.prompt.focus();
-        return;
-      }
-    } else {
+    if (state.tier === "nvidia" && !prompt) {
+      els.status.textContent = "Введите промпт для FLUX.1-dev (NVIDIA).";
+      els.prompt.focus();
+      return;
+    }
+    if (state.tier !== "nvidia") {
       if (state.editImage && !prompt) {
         els.status.textContent = "Опишите, что изменить на прикреплённом фото.";
         els.prompt.focus();
@@ -599,17 +668,24 @@ async function generate() {
       } : {
         genMode: "image",
         prompt,
-        aspectRatio: state.aspect, size: state.size, count: state.count,
-        tier: state.useNvidia ? "nvidia" : state.tier,
+        aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
         enhance: !!(els.enhance && els.enhance.checked),
-        // NVIDIA (free trial) is text-only — deliberately send no refs/character/edit-image.
-        characterId: state.useNvidia ? "" : (state.characterId || ""),
-        editImage: state.useNvidia ? null : (state.editImage ? { mimeType: state.editImage.mimeType, dataBase64: state.editImage.dataBase64 } : null),
-        faceRefs: state.useNvidia ? [] : refsPayload("faceRefs"),
-        poseRefs: state.useNvidia ? [] : refsPayload("poseRefs"),
-        garmentRefs: state.useNvidia ? [] : refsPayload("garmentRefs"),
-        productRefs: state.useNvidia ? [] : refsPayload("productRefs"),
-        backgroundRefs: state.useNvidia ? [] : refsPayload("backgroundRefs"),
+        characterId: state.characterId || "",
+        editImage: state.editImage ? { mimeType: state.editImage.mimeType, dataBase64: state.editImage.dataBase64 } : null,
+        faceRefs: refsPayload("faceRefs"),
+        poseRefs: refsPayload("poseRefs"),
+        garmentRefs: refsPayload("garmentRefs"),
+        productRefs: refsPayload("productRefs"),
+        backgroundRefs: refsPayload("backgroundRefs"),
+        // NVIDIA-specific params (ignored by WaveSpeed)
+        nvidiaMode: state.nvidiaMode,
+        nvidiaRatio: state.nvidiaRatio,
+        nvidiaCfgScale: state.nvidiaCfgScale,
+        nvidiaSteps: state.nvidiaSteps,
+        nvidiaSeed: state.nvidiaSeed,
+        ...(state.nvidiaMode !== "base" && state.nvidiaInputImage ? {
+          nvidiaInputImage: { mimeType: state.nvidiaInputImage.mimeType, dataBase64: state.nvidiaInputImage.dataBase64 }
+        } : {}),
       }),
     });
     const d = await r.json();
@@ -642,7 +718,7 @@ setupRefs();
 setupEditAttach();
 setupVideoFrames();
 setupCharacters();
-setupNvidiaToggle();
+setupNvidiaSettings();
 updateRefsNote();
 showEmpty();
 loadHistory();
