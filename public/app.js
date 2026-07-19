@@ -20,7 +20,15 @@ const state = {
   editImage: null, // { mimeType, dataBase64, thumbUrl } — for pure image editing
   videoFirstFrame: null, // { mimeType, dataBase64, thumbUrl }
   videoLastFrame: null,  // { mimeType, dataBase64, thumbUrl }
-  videoDuration: 5,      // 5 or 8 seconds
+  videoDuration: 5,
+  videoModelKey: "wan22",       // "wan22" | "wan25"
+  videoModels: {
+    wan22: { label: "WAN 2.2", supportsResolution: false, supportsLastFrame: true, supportsAudio: false, durationOptions: [5, 8] },
+    wan25: { label: "WAN 2.5", supportsResolution: true, supportsLastFrame: false, supportsAudio: true, durationOptions: [5, 6, 7, 8, 9, 10] },
+  },
+  wan25Resolution: "720p",
+  videoSeed: -1,
+  videoAudio: null,             // { mimeType, dataBase64 } for WAN 2.5
   characterId: "",
   characters: [],
   // NVIDIA FLUX.1-dev params — used when tier === "nvidia" ("Быстро")
@@ -49,7 +57,16 @@ const els = {
   settingsImage: $("#settings-image"), settingsVideo: $("#settings-video"),
   vfirstDrop: $("#vfirst-drop"), vfirstInput: $("#vfirst-input"), vfirstThumbs: $("#vfirst-thumbs"),
   vlastDrop: $("#vlast-drop"), vlastInput: $("#vlast-input"), vlastThumbs: $("#vlast-thumbs"),
+  vlastZone: $("#vlast-zone"),
   vdurations: $("#vdurations"), negPrompt: $("#neg-prompt"),
+  videoModelBtns: $("#video-model-btns"),
+  wan25Settings: $("#wan25-settings"),
+  wan25Resolutions: $("#wan25-resolutions"),
+  videoSeedEl: $("#video-seed"),
+  audioRecordBtn: $("#audio-record-btn"),
+  audioFileBtn: $("#audio-file-btn"), audioFileInput: $("#audio-file-input"),
+  audioStatus: $("#audio-status"),
+  audioPreview: $("#audio-preview"), audioPlayer: $("#audio-player"), audioRemove: $("#audio-remove"),
   imageControls: $("#image-controls"),
   nvidiaSettings: $("#nvidia-settings"),
   nvidiaModesBtns: $("#nvidia-modes"),
@@ -188,11 +205,52 @@ function setupVideoFrames() {
   setupVideoFrameZone("videoLastFrame", els.vlastDrop, els.vlastInput, els.vlastThumbs);
 }
 
+// ---- Video model switcher --------------------------------------------------
+function renderVideoModels() {
+  if (!els.videoModelBtns) return;
+  els.videoModelBtns.innerHTML = "";
+  for (const [key, vm] of Object.entries(state.videoModels)) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "seg" + (key === state.videoModelKey ? " active" : "");
+    b.textContent = vm.label;
+    b.onclick = () => { state.videoModelKey = key; applyVideoModelUI(); };
+    els.videoModelBtns.appendChild(b);
+  }
+}
+function applyVideoModelUI() {
+  renderVideoModels();
+  const vm = state.videoModels[state.videoModelKey];
+  // Last frame: show only for WAN 2.2
+  if (els.vlastZone) els.vlastZone.hidden = !vm.supportsLastFrame;
+  // WAN 2.5 extra settings
+  if (els.wan25Settings) els.wan25Settings.hidden = state.videoModelKey !== "wan25";
+  // Clamp duration to valid options
+  if (!vm.durationOptions.includes(state.videoDuration)) state.videoDuration = vm.durationOptions[0];
+  renderDurations();
+  updateCost();
+}
+
+// ---- WAN 2.5 resolution ---------------------------------------------------
+function renderWan25Resolutions() {
+  if (!els.wan25Resolutions) return;
+  els.wan25Resolutions.innerHTML = "";
+  for (const r of ["720p", "1080p"]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "seg" + (r === state.wan25Resolution ? " active" : "");
+    b.textContent = r;
+    b.onclick = () => { state.wan25Resolution = r; renderWan25Resolutions(); updateCost(); };
+    els.wan25Resolutions.appendChild(b);
+  }
+}
+
 // ---- Video duration selector -----------------------------------------------
 function renderDurations() {
   if (!els.vdurations) return;
   els.vdurations.innerHTML = "";
-  for (const d of [5, 8]) {
+  const opts = state.videoModels[state.videoModelKey]?.durationOptions || [5, 8];
+  for (const d of opts) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "seg" + (d === state.videoDuration ? " active" : "");
@@ -200,6 +258,60 @@ function renderDurations() {
     b.onclick = () => { state.videoDuration = d; renderDurations(); updateCost(); };
     els.vdurations.appendChild(b);
   }
+}
+
+// ---- Audio (record + upload, WAN 2.5) ------------------------------------
+let _mediaRecorder = null;
+let _audioChunks = [];
+function setAudioPreview(blob, mimeType) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const b64 = reader.result.split(",")[1];
+    state.videoAudio = { mimeType, dataBase64: b64 };
+    if (els.audioPlayer) { els.audioPlayer.src = reader.result; }
+    if (els.audioPreview) els.audioPreview.hidden = false;
+    if (els.audioStatus) els.audioStatus.textContent = `✓ ${(blob.size / 1024).toFixed(0)} КБ`;
+  };
+  reader.readAsDataURL(blob);
+}
+function setupAudio() {
+  if (els.audioRemove) els.audioRemove.onclick = () => {
+    state.videoAudio = null;
+    if (els.audioPreview) els.audioPreview.hidden = true;
+    if (els.audioStatus) els.audioStatus.textContent = "";
+    if (els.audioPlayer) els.audioPlayer.src = "";
+  };
+  // File upload
+  if (els.audioFileBtn) els.audioFileBtn.onclick = () => els.audioFileInput && els.audioFileInput.click();
+  if (els.audioFileInput) els.audioFileInput.onchange = () => {
+    const f = els.audioFileInput.files[0]; els.audioFileInput.value = "";
+    if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { if (els.audioStatus) els.audioStatus.textContent = "⚠ файл > 15 МБ"; return; }
+    setAudioPreview(f, f.type || "audio/mpeg");
+  };
+  // Recording
+  if (els.audioRecordBtn) els.audioRecordBtn.onclick = async () => {
+    if (_mediaRecorder && _mediaRecorder.state === "recording") {
+      _mediaRecorder.stop();
+      els.audioRecordBtn.textContent = "🎙️ Записать";
+      els.audioRecordBtn.classList.remove("rec", "recording");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      _audioChunks = [];
+      _mediaRecorder = new MediaRecorder(stream);
+      _mediaRecorder.ondataavailable = e => { if (e.data.size) _audioChunks.push(e.data); };
+      _mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(_audioChunks, { type: "audio/webm" });
+        setAudioPreview(blob, "audio/webm");
+      };
+      _mediaRecorder.start();
+      els.audioRecordBtn.textContent = "⏹ Стоп";
+      els.audioRecordBtn.classList.add("rec", "recording");
+    } catch { if (els.audioStatus) els.audioStatus.textContent = "⚠ Нет доступа к микрофону"; }
+  };
 }
 
 // ---- NVIDIA FLUX.1-dev settings (shown when tier === "nvidia" = "Быстро") ----
@@ -281,9 +393,10 @@ async function loadCapabilities() {
     if (Number.isInteger(d.maxImages)) state.maxImages = d.maxImages;
     if (Array.isArray(d.nvidiaRatios) && d.nvidiaRatios.length) state.nvidiaRatios = d.nvidiaRatios;
     if (Array.isArray(d.nvidiaModes) && d.nvidiaModes.length) state.nvidiaModes = d.nvidiaModes;
+    if (d.videoModels && typeof d.videoModels === "object") state.videoModels = { ...state.videoModels, ...d.videoModels };
     if (d.atomesusEnhance && els.enhanceRow) els.enhanceRow.hidden = false;
   } catch { /* keep defaults */ }
-  renderAspects(); renderCounts(); renderTiers(); renderSizes(); renderDurations(); renderNvidiaRatios(); renderNvidiaModes(); updateNvidiaVisibility(); updateCost();
+  renderAspects(); renderCounts(); renderTiers(); renderSizes(); renderDurations(); renderNvidiaRatios(); renderNvidiaModes(); renderVideoModels(); renderWan25Resolutions(); updateNvidiaVisibility(); updateCost();
 }
 
 // ---- Voice input (optional; hidden if unsupported) ------------------------
@@ -663,8 +776,13 @@ async function generate() {
         negativePrompt: els.negPrompt ? els.negPrompt.value.trim() : "",
         duration: state.videoDuration,
         enhance: !!(els.enhance && els.enhance.checked),
+        videoModelKey: state.videoModelKey,
+        seed: els.videoSeedEl ? (parseInt(els.videoSeedEl.value) || -1) : -1,
+        resolution: state.wan25Resolution,
         firstFrame: state.videoFirstFrame ? { mimeType: state.videoFirstFrame.mimeType, dataBase64: state.videoFirstFrame.dataBase64 } : null,
-        lastFrame: state.videoLastFrame ? { mimeType: state.videoLastFrame.mimeType, dataBase64: state.videoLastFrame.dataBase64 } : null,
+        lastFrame: (state.videoModels[state.videoModelKey]?.supportsLastFrame && state.videoLastFrame)
+          ? { mimeType: state.videoLastFrame.mimeType, dataBase64: state.videoLastFrame.dataBase64 } : null,
+        audio: state.videoAudio ? { mimeType: state.videoAudio.mimeType, dataBase64: state.videoAudio.dataBase64 } : null,
       } : {
         genMode: "image",
         prompt,
@@ -719,6 +837,8 @@ setupEditAttach();
 setupVideoFrames();
 setupCharacters();
 setupNvidiaSettings();
+setupAudio();
+applyVideoModelUI(); // init last-frame visibility & duration options
 updateRefsNote();
 showEmpty();
 loadHistory();

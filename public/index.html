@@ -143,22 +143,61 @@
 
         <!-- VIDEO settings (shown when mode=video) -->
         <div id="settings-video" class="settings-content" hidden>
+
+          <!-- Model switcher -->
+          <div class="control">
+            <label>Модель видео</label>
+            <div id="video-model-btns" class="segmented"></div>
+          </div>
+
+          <!-- Frames (first frame always shown; last frame hidden for WAN 2.5) -->
           <div class="video-frames">
             <div class="refzone">
               <label>Первый кадр <span class="hint">обязателен</span></label>
               <div class="dropzone" id="vfirst-drop" tabindex="0" role="button"><input type="file" id="vfirst-input" accept="image/*" hidden /><span class="dz-hint">Загрузите изображение</span><div class="thumbs" id="vfirst-thumbs"></div></div>
             </div>
-            <div class="refzone">
+            <div class="refzone" id="vlast-zone">
               <label>Последний кадр <span class="hint">опционально</span></label>
               <div class="dropzone" id="vlast-drop" tabindex="0" role="button"><input type="file" id="vlast-input" accept="image/*" hidden /><span class="dz-hint">Загрузите изображение</span><div class="thumbs" id="vlast-thumbs"></div></div>
             </div>
           </div>
+
+          <!-- WAN 2.5 extra settings -->
+          <div id="wan25-settings" hidden>
+            <div class="control-row">
+              <div class="control">
+                <label>Разрешение</label>
+                <div id="wan25-resolutions" class="segmented"></div>
+              </div>
+            </div>
+            <!-- Audio -->
+            <div class="video-audio-section">
+              <label>Аудио <span class="hint">опционально · wav/mp3 ≤ 15 МБ</span></label>
+              <div class="audio-controls">
+                <button id="audio-record-btn" class="linkbtn" type="button">🎙️ Записать</button>
+                <button id="audio-file-btn" class="linkbtn" type="button">📂 Загрузить файл</button>
+                <input type="file" id="audio-file-input" accept=".wav,.mp3,audio/wav,audio/mpeg" hidden />
+                <span id="audio-status" class="hint-note"></span>
+              </div>
+              <div id="audio-preview" class="audio-preview" hidden>
+                <audio id="audio-player" controls></audio>
+                <button id="audio-remove" class="linkbtn danger" type="button">✕ убрать</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Duration (updates per model) -->
           <div class="video-controls">
             <div class="control">
               <label>Длительность</label>
               <div id="vdurations" class="segmented"></div>
             </div>
+            <div class="control">
+              <label>Seed <span class="hint">-1 = случайный</span></label>
+              <input type="number" id="video-seed" value="-1" min="-1" max="2147483647" class="seed-input" style="max-width:140px" />
+            </div>
           </div>
+
           <div class="video-neg-prompt">
             <label>Негативный промпт <span class="hint">чего избегать в видео</span></label>
             <textarea id="neg-prompt" rows="2" placeholder="Нечёткость, дрожание, деформация лица, лишние конечности…"></textarea>
