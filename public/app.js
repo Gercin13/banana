@@ -17,7 +17,7 @@ const state = {
   garmentRefs: [],
   productRefs: [],
   backgroundRefs: [],
-  editImage: null, // { mimeType, dataBase64, thumbUrl } — for pure image editing
+  editImages: [], // [{ mimeType, dataBase64, thumbUrl }] — multi-angle refs via 📎
   videoFirstFrame: null, // { mimeType, dataBase64, thumbUrl }
   videoLastFrame: null,  // { mimeType, dataBase64, thumbUrl }
   videoDuration: 5,
@@ -50,7 +50,7 @@ const els = {
   gallery: $("#gallery"), history: $("#history"), refreshHistory: $("#refresh-history"),
   refsNote: $("#refs-note"), enhanceRow: $("#enhance-row"), enhance: $("#enhance"),
   attach: $("#attach"), attachInput: $("#attach-input"),
-  editPreview: $("#edit-preview"), editThumb: $("#edit-thumb"), editRemove: $("#edit-remove"),
+  editPreview: $("#edit-preview"), editThumbsRow: $("#edit-thumbs-row"), editLabel: $("#edit-label"), editRemove: $("#edit-remove"),
   character: $("#character"), saveChar: $("#save-char"), delChar: $("#del-char"), charPreview: $("#char-preview"),
   cost: $("#cost-estimate"),
   modeImage: $("#mode-image"), modeVideo: $("#mode-video"),
@@ -493,30 +493,47 @@ function setupRefs() {
 }
 
 // ---- Edit image (attach photo to prompt for editing) ----------------------
+const MAX_EDIT_IMAGES = 8; // max multi-angle refs via 📎
+
 function renderEditPreview() {
   if (!els.editPreview) return;
-  if (state.editImage) {
-    els.editThumb.innerHTML = '';
-    const img = document.createElement("img"); img.src = state.editImage.thumbUrl; img.alt = "";
-    els.editThumb.appendChild(img);
+  const n = state.editImages.length;
+  if (n > 0) {
+    if (els.editThumbsRow) {
+      els.editThumbsRow.innerHTML = "";
+      state.editImages.forEach((ref, i) => {
+        const t = document.createElement("div"); t.className = "thumb";
+        const img = document.createElement("img"); img.src = ref.thumbUrl; img.alt = "";
+        const rm = document.createElement("button");
+        rm.className = "rm"; rm.type = "button"; rm.textContent = "×";
+        rm.onclick = (e) => { e.stopPropagation(); state.editImages.splice(i, 1); renderEditPreview(); };
+        t.append(img, rm);
+        els.editThumbsRow.appendChild(t);
+      });
+    }
+    if (els.editLabel) els.editLabel.textContent = `Референсы (${n}):`;
     els.editPreview.hidden = false;
-    els.prompt.placeholder = "Опишите, что изменить на фото…  (убрать фон, заменить цвет, удалить объект и т.п.)";
+    els.prompt.placeholder = n > 1
+      ? "Опишите задачу (создай максимально похожее изображение, портрет в этом стиле и т.п.)…"
+      : "Опишите, что изменить на фото или создать с этим референсом…";
   } else {
     els.editPreview.hidden = true;
-    els.editThumb.innerHTML = '';
+    if (els.editThumbsRow) els.editThumbsRow.innerHTML = "";
     els.prompt.placeholder = "Опишите изображение — или оставьте пустым, и я соберу из референсов.  (Ctrl / ⌘ + Enter — сгенерировать)";
   }
 }
 function setupEditAttach() {
   if (els.attach) els.attach.onclick = () => els.attachInput && els.attachInput.click();
   if (els.attachInput) els.attachInput.onchange = async () => {
-    const f = els.attachInput.files[0];
+    const files = [...(els.attachInput.files || [])].filter(f => f.type.startsWith("image/"));
     els.attachInput.value = "";
-    if (!f || !f.type.startsWith("image/")) return;
-    try { state.editImage = await fileToRef(f); } catch { return; }
+    for (const f of files) {
+      if (state.editImages.length >= MAX_EDIT_IMAGES) break;
+      try { state.editImages.push(await fileToRef(f)); } catch { /* skip bad file */ }
+    }
     renderEditPreview();
   };
-  if (els.editRemove) els.editRemove.onclick = () => { state.editImage = null; renderEditPreview(); };
+  if (els.editRemove) els.editRemove.onclick = () => { state.editImages = []; renderEditPreview(); };
 }
 
 // ---- Saved characters (a named set of face references) --------------------
@@ -751,12 +768,12 @@ async function generate() {
       return;
     }
     if (state.tier !== "nvidia") {
-      if (state.editImage && !prompt) {
-        els.status.textContent = "Опишите, что изменить на прикреплённом фото.";
+      if (state.editImages.length > 0 && !prompt) {
+        els.status.textContent = "Опишите задачу (что создать с этими референсами).";
         els.prompt.focus();
         return;
       }
-      if (!prompt && totalRefs() === 0 && !state.characterId && !state.editImage) {
+      if (!prompt && totalRefs() === 0 && !state.characterId && state.editImages.length === 0) {
         els.status.textContent = "Введите промпт, добавьте референс или выберите персонажа.";
         els.prompt.focus();
         return;
@@ -789,7 +806,7 @@ async function generate() {
         aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
         enhance: !!(els.enhance && els.enhance.checked),
         characterId: state.characterId || "",
-        editImage: state.editImage ? { mimeType: state.editImage.mimeType, dataBase64: state.editImage.dataBase64 } : null,
+        editImages: state.editImages.map(r => ({ mimeType: r.mimeType, dataBase64: r.dataBase64 })),
         faceRefs: refsPayload("faceRefs"),
         poseRefs: refsPayload("poseRefs"),
         garmentRefs: refsPayload("garmentRefs"),
@@ -810,7 +827,8 @@ async function generate() {
     if (!r.ok) throw new Error(d.error || "Ошибка генерации");
     renderResults(d.images, d.mode);
     const bits = [d.mode === "video" ? "Готово: видео" : `Готово: ${d.images.length} изобр.`];
-    if (d.mode === "edit") bits.push("режим: редактирование фото");
+    if (d.mode === "edit") bits.push(`режим: редактирование по референсам`);
+
     else if (d.mode === "auto") bits.push("режим: авто из референсов");
     if (d.model) bits.push(`модель: ${d.model}`);
     if (d.enhanced) bits.push("промпт улучшен Atomesus");
