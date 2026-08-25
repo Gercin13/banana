@@ -8,7 +8,7 @@ const state = {
   tier: "draft",
   size: "1K",
   aspects: ["1:1", "4:5", "5:4", "3:4", "4:3", "2:3", "3:2", "9:16", "16:9", "21:9"],
-  tiers: [{ id: "nvidia", label: "Быстро" }, { id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
+  tiers: [{ id: "draft", label: "Черновик" }, { id: "quality", label: "Качество" }],
   sizes: ["1K", "2K"],
   maxImages: 4,
   maxRefs: 10,

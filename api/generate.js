@@ -3,7 +3,7 @@
 // For WaveSpeed (async): returns { completed: false, taskId, resultUrl, provider: "wavespeed", meta: {...} }.
 // The client polls /api/poll for WaveSpeed tasks.
 
-import { generateOneNvidia, submitWavespeed, MODELS, TIERS, VIDEO_MODELS, NVIDIA_MODEL_LABEL, NVIDIA_RATIOS, NVIDIA_MODES } from '../lib/engine.js';
+import { submitWavespeed, MODELS, TIERS, VIDEO_MODELS } from '../lib/engine.js';
 import { saveImage, saveRecord, loadCharacterRefs } from '../lib/store.js';
 import { enhancePrompt, atomesusAvailable } from '../lib/atomesus.js';
 
@@ -58,8 +58,7 @@ export default async function handler(req, res) {
     }
 
     // ---- IMAGE ----
-    const { prompt, aspectRatio, size, count, tier, enhance, characterId,
-            nvidiaMode, nvidiaRatio, nvidiaCfgScale, nvidiaSteps, nvidiaSeed } = body;
+    const { prompt, aspectRatio, size, count, tier, enhance, characterId } = body;
     const editImages = cleanRefs(Array.isArray(body.editImages) ? body.editImages : (body.editImage ? [body.editImage] : []));
     const charRefs = characterId ? await loadCharacterRefs(characterId) : [];
     const faceRefs = [...charRefs, ...cleanRefs(body.faceRefs)];
@@ -71,7 +70,7 @@ export default async function handler(req, res) {
     const userText = prompt ? String(prompt).trim() : "";
     const totalRefs = faceRefs.length + poseRefs.length + garmentRefs.length + productRefs.length + backgroundRefs.length;
     const isEditMode = editImages.length > 0;
-    const effTier = isEditMode && (tier === "nvidia") ? "draft" : (tier || "draft");
+    const effTier = tier || "draft";
 
     if (!userText && totalRefs === 0 && !isEditMode) return res.status(400).json({ error: "Введите промпт или добавьте референс." });
     if (isEditMode && !userText) return res.status(400).json({ error: "Опишите задачу." });
@@ -111,17 +110,6 @@ export default async function handler(req, res) {
     }
     if (!isEditMode && !backgroundRefs.length) {
       finalPrompt += !userText ? " Plain, pure white background." : " If no specific background is described, use a plain white background.";
-    }
-
-    // ---- NVIDIA (synchronous — fits in 10s) ----
-    if (effTier === "nvidia") {
-      const img = await generateOneNvidia({
-        prompt: finalPrompt, mode: nvidiaMode || "base", ratio: nvidiaRatio || "1:1",
-        cfgScale: nvidiaCfgScale ?? 3.5, steps: nvidiaSteps ?? 50, seed: nvidiaSeed ?? 0,
-      });
-      const saved = await saveImage(img);
-      const record = await saveRecord({ prompt: userText || "(nvidia)", mode: "manual", model: NVIDIA_MODEL_LABEL, images: [saved] });
-      return res.json({ completed: true, id: record.id, model: NVIDIA_MODEL_LABEL, mode: "manual", images: [saved], errors: [] });
     }
 
     // ---- WaveSpeed (async — client polls) ----
