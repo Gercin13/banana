@@ -602,7 +602,7 @@ async function deleteCharacterAction() {
   if (!state.characterId) return;
   const c = state.characters.find((x) => x.id === state.characterId);
   if (!window.confirm(`Удалить персонажа «${c ? c.name : ""}»?`)) return;
-  try { await fetch(`/api/characters/${state.characterId}`, { method: "DELETE" }); } catch {}
+  try { await fetch(`/api/characters?id=${state.characterId}`, { method: "DELETE" }); } catch {}
   state.characterId = "";
   await loadCharacters();
 }
@@ -686,6 +686,18 @@ async function doUpscale(url, isVideo, btn, targetResolution) {
     const r = await fetch("/api/upscale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Upscale error");
+    // Poll for result (upscale is async on Vercel too)
+    if (d.completed === false && d.resultUrl) {
+      const metaStr = typeof d.meta === 'string' ? d.meta : JSON.stringify(d.meta || {});
+      const pollUrl = `/api/poll?resultUrl=${encodeURIComponent(d.resultUrl)}&meta=${encodeURIComponent(metaStr)}`;
+      for (let i = 0; i < 60; i++) {
+        await new Promise(ok => setTimeout(ok, 3000));
+        const pr = await fetch(pollUrl);
+        const pd = await pr.json();
+        if (pd.completed) { btn.textContent = "✅ " + targetResolution.toUpperCase(); btn.classList.remove("busy"); loadHistory(); return; }
+      }
+      throw new Error("Upscale timeout");
+    }
     btn.textContent = "✅ " + targetResolution.toUpperCase(); btn.classList.remove("busy");
     loadHistory();
   } catch (e) {
@@ -727,7 +739,7 @@ async function loadHistory() {
           downloadName: `nano-${rec.id}.${ext}`,
           isVideo,
           onDelete: async () => {
-            try { await fetch(`/api/history/${rec.id}`, { method: "DELETE" }); } catch {}
+            try { await fetch(`/api/history?id=${rec.id}`, { method: "DELETE" }); } catch {}
             loadHistory();
           },
         }));
@@ -784,57 +796,80 @@ async function generate() {
   setBusy(true);
   skeletons(state.count);
   try {
+    const requestBody = state.genMode === "video" ? {
+      genMode: "video",
+      prompt,
+      negativePrompt: els.negPrompt ? els.negPrompt.value.trim() : "",
+      duration: state.videoDuration,
+      enhance: !!(els.enhance && els.enhance.checked),
+      videoModelKey: state.videoModelKey,
+      seed: els.videoSeedEl ? (parseInt(els.videoSeedEl.value) || -1) : -1,
+      resolution: state.wan25Resolution,
+      firstFrame: state.videoFirstFrame ? { mimeType: state.videoFirstFrame.mimeType, dataBase64: state.videoFirstFrame.dataBase64 } : null,
+      lastFrame: (state.videoModels[state.videoModelKey]?.supportsLastFrame && state.videoLastFrame)
+        ? { mimeType: state.videoLastFrame.mimeType, dataBase64: state.videoLastFrame.dataBase64 } : null,
+      audio: state.videoAudio ? { mimeType: state.videoAudio.mimeType, dataBase64: state.videoAudio.dataBase64 } : null,
+    } : {
+      genMode: "image",
+      prompt,
+      aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
+      enhance: !!(els.enhance && els.enhance.checked),
+      characterId: state.characterId || "",
+      editImages: state.editImages.map(r => ({ mimeType: r.mimeType, dataBase64: r.dataBase64 })),
+      faceRefs: refsPayload("faceRefs"),
+      poseRefs: refsPayload("poseRefs"),
+      garmentRefs: refsPayload("garmentRefs"),
+      productRefs: refsPayload("productRefs"),
+      backgroundRefs: refsPayload("backgroundRefs"),
+      nvidiaMode: state.nvidiaMode,
+      nvidiaRatio: state.nvidiaRatio,
+      nvidiaCfgScale: state.nvidiaCfgScale,
+      nvidiaSteps: state.nvidiaSteps,
+      nvidiaSeed: state.nvidiaSeed,
+      ...(state.nvidiaMode !== "base" && state.nvidiaInputImage ? {
+        nvidiaInputImage: { mimeType: state.nvidiaInputImage.mimeType, dataBase64: state.nvidiaInputImage.dataBase64 }
+      } : {}),
+    };
+
     const r = await fetch("/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state.genMode === "video" ? {
-        genMode: "video",
-        prompt,
-        negativePrompt: els.negPrompt ? els.negPrompt.value.trim() : "",
-        duration: state.videoDuration,
-        enhance: !!(els.enhance && els.enhance.checked),
-        videoModelKey: state.videoModelKey,
-        seed: els.videoSeedEl ? (parseInt(els.videoSeedEl.value) || -1) : -1,
-        resolution: state.wan25Resolution,
-        firstFrame: state.videoFirstFrame ? { mimeType: state.videoFirstFrame.mimeType, dataBase64: state.videoFirstFrame.dataBase64 } : null,
-        lastFrame: (state.videoModels[state.videoModelKey]?.supportsLastFrame && state.videoLastFrame)
-          ? { mimeType: state.videoLastFrame.mimeType, dataBase64: state.videoLastFrame.dataBase64 } : null,
-        audio: state.videoAudio ? { mimeType: state.videoAudio.mimeType, dataBase64: state.videoAudio.dataBase64 } : null,
-      } : {
-        genMode: "image",
-        prompt,
-        aspectRatio: state.aspect, size: state.size, count: state.count, tier: state.tier,
-        enhance: !!(els.enhance && els.enhance.checked),
-        characterId: state.characterId || "",
-        editImages: state.editImages.map(r => ({ mimeType: r.mimeType, dataBase64: r.dataBase64 })),
-        faceRefs: refsPayload("faceRefs"),
-        poseRefs: refsPayload("poseRefs"),
-        garmentRefs: refsPayload("garmentRefs"),
-        productRefs: refsPayload("productRefs"),
-        backgroundRefs: refsPayload("backgroundRefs"),
-        // NVIDIA-specific params (ignored by WaveSpeed)
-        nvidiaMode: state.nvidiaMode,
-        nvidiaRatio: state.nvidiaRatio,
-        nvidiaCfgScale: state.nvidiaCfgScale,
-        nvidiaSteps: state.nvidiaSteps,
-        nvidiaSeed: state.nvidiaSeed,
-        ...(state.nvidiaMode !== "base" && state.nvidiaInputImage ? {
-          nvidiaInputImage: { mimeType: state.nvidiaInputImage.mimeType, dataBase64: state.nvidiaInputImage.dataBase64 }
-        } : {}),
-      }),
+      body: JSON.stringify(requestBody),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || "Ошибка генерации");
-    renderResults(d.images, d.mode);
-    const bits = [d.mode === "video" ? "Готово: видео" : `Готово: ${d.images.length} изобр.`];
-    if (d.mode === "edit") bits.push(`режим: редактирование по референсам`);
 
-    else if (d.mode === "auto") bits.push("режим: авто из референсов");
-    if (d.model) bits.push(`модель: ${d.model}`);
-    if (d.enhanced) bits.push("промпт улучшен Atomesus");
-    if (d.errors?.length) bits.push(`${d.errors.length} из ${state.count} не удалось`);
-    els.status.textContent = bits.join(" · ");
-    loadHistory();
+    // --- Client-side polling (for WaveSpeed async tasks) ---
+    if (d.completed === false && d.resultUrl) {
+      els.status.textContent = "⏳ Генерация запущена, ожидаю результат…";
+      const metaStr = encodeURIComponent(JSON.stringify(d.meta || {}));
+      const pollUrl = `/api/poll?resultUrl=${encodeURIComponent(d.resultUrl)}&meta=${metaStr}`;
+      let pollResult;
+      for (let i = 0; i < 120; i++) { // up to ~6 min
+        await new Promise(ok => setTimeout(ok, 3000));
+        const pr = await fetch(pollUrl);
+        pollResult = await pr.json();
+        if (pollResult.completed) break;
+        els.status.textContent = `⏳ ${pollResult.status || "processing"}… (${(i + 1) * 3}с)`;
+      }
+      if (!pollResult?.completed) throw new Error("Таймаут ожидания результата");
+      if (pollResult.errors?.length && !pollResult.images?.length) throw new Error(pollResult.errors[0]);
+      renderResults(pollResult.images || [], pollResult.mode);
+      const bits = [pollResult.mode === "video" ? "Готово: видео" : `Готово: ${(pollResult.images || []).length} изобр.`];
+      if (pollResult.model) bits.push(`модель: ${pollResult.model}`);
+      els.status.textContent = bits.join(" · ");
+      loadHistory();
+    } else {
+      // Synchronous result (NVIDIA or already completed)
+      renderResults(d.images, d.mode);
+      const bits = [d.mode === "video" ? "Готово: видео" : `Готово: ${d.images.length} изобр.`];
+      if (d.mode === "edit") bits.push("режим: редактирование по референсам");
+      else if (d.mode === "auto") bits.push("режим: авто из референсов");
+      if (d.model) bits.push(`модель: ${d.model}`);
+      if (d.errors?.length) bits.push(`${d.errors.length} не удалось`);
+      els.status.textContent = bits.join(" · ");
+      loadHistory();
+    }
   } catch (e) {
     showEmpty();
     els.status.textContent = "⚠ " + (e.message || e);
